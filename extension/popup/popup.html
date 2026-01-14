@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LocatorLens</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+          <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+          <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+        </svg>
+        <h1>LocatorLens</h1>
+      </div>
+    </div>
+
+    <!-- Server Control Panel -->
+    <div class="server-control">
+      <div class="server-status-row">
+        <div class="server-indicator">
+          <span id="backend-dot" class="status-dot"></span>
+          <span>Backend</span>
+        </div>
+        <div class="server-indicator">
+          <span id="appium-dot" class="status-dot"></span>
+          <span>Appium</span>
+        </div>
+      </div>
+      <button id="server-btn" class="btn btn-secondary btn-sm">
+        Start Servers
+      </button>
+    </div>
+
+    <div id="status" class="status status-disconnected hidden">
+      <span class="status-dot"></span>
+      <span class="status-text">Disconnected</span>
+    </div>
+
+    <!-- Log Viewer -->
+    <div class="logs-container">
+      <div class="logs-header" id="logs-toggle">
+        <span>Server Logs</span>
+        <span class="toggle-icon">▼</span>
+      </div>
+      <div class="logs-content" id="logs-content">
+        <!-- Logs will appear here -->
+      </div>
+    </div>
+
+
+    <div id="error-message" class="error-message hidden"></div>
+
+    <div class="form-group">
+      <label for="platform-select">Platform</label>
+      <select id="platform-select" class="select-input">
+        <option value="">Select Platform</option>
+        <option value="android">Android</option>
+        <option value="ios">iOS</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="device-select">Device / Simulator</label>
+      <select id="device-select" class="select-input" disabled>
+        <option value="">Select a platform first</option>
+      </select>
+    </div>
+
+    <button id="connect-btn" class="btn btn-primary" disabled>
+      <svg class="btn-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="2" />
+        <path d="M8 5V11M5 8H11" stroke="currentColor" stroke-width="2" />
+      </svg>
+      Connect to Device
+    </button>
+
+
+    <div class="footer">
+      <a href="#" id="help-link" title="Help & Prerequisites">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
+        Help
+      </a>
+      <a href="#" id="settings-link">Settings</a>
+      <span class="version">v1.0.0</span>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+
+</html>

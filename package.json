@@ -1,0 +1,20 @@
+{
+    "name": "locator-builder",
+    "version": "1.0.0",
+    "description": "Chrome extension for identifying locators in Android/iOS apps using Appium",
+    "scripts": {
+        "backend": "cd backend && npm start",
+        "backend:dev": "cd backend && npm run dev",
+        "install:backend": "cd backend && npm install",
+        "install:all": "npm run install:backend"
+    },
+    "keywords": [
+        "appium",
+        "mobile",
+        "testing",
+        "chrome-extension",
+        "locator"
+    ],
+    "author": "",
+    "license": "MIT"
+}

@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LocatorLens Settings</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            padding: 20px;
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #f9fafb;
+            color: #111827;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        h2 {
+            font-size: 18px;
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+
+        .setting-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .setting-row:last-child {
+            border-bottom: none;
+        }
+
+        label {
+            font-weight: 500;
+        }
+
+        input[type="text"],
+        input[type="number"] {
+            padding: 8px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            width: 200px;
+        }
+
+        button {
+            background-color: #4f46e5;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        button:hover {
+            background-color: #4338ca;
+        }
+
+        .prereq-item {
+            padding: 10px 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .prereq-item:last-child {
+            border-bottom: none;
+        }
+
+        code {
+            background: #f3f4f6;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        a {
+            color: #4f46e5;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Settings</h1>
+
+    <div class="card">
+        <h2>Server Configuration</h2>
+        <div class="setting-row">
+            <label for="backend-port">Backend Port</label>
+            <input type="number" id="backend-port" value="8765">
+        </div>
+        <div class="setting-row">
+            <label for="appium-url">Appium URL</label>
+            <input type="text" id="appium-url" value="http://localhost:4723">
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Inspector Defaults</h2>
+        <div class="setting-row">
+            <label for="fps-limit">Screen Mirror FPS</label>
+            <input type="number" id="fps-limit" value="3" min="1" max="30">
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>📋 Prerequisites</h2>
+        <p style="margin-bottom: 15px; color: #6b7280;">Install these before using the extension:</p>
+
+        <div class="prereq-item">
+            <strong>1. Node.js</strong> (v18+)
+            <div style="color: #6b7280; font-size: 13px;">Download from <a href="https://nodejs.org"
+                    target="_blank">nodejs.org</a></div>
+        </div>
+
+        <div class="prereq-item">
+            <strong>2. Appium Server</strong>
+            <div style="color: #6b7280; font-size: 13px;"><code>npm install -g appium</code></div>
+        </div>
+
+        <div class="prereq-item">
+            <strong>3. Appium Drivers</strong>
+            <div style="color: #6b7280; font-size: 13px;">
+                Android: <code>appium driver install uiautomator2</code><br>
+                iOS: <code>appium driver install xcuitest</code>
+            </div>
+        </div>
+
+        <div class="prereq-item">
+            <strong>4. Platform Tools</strong>
+            <div style="color: #6b7280; font-size: 13px;">
+                Android: ADB (via Android Studio)<br>
+                iOS: Xcode (macOS only)
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>❓ Help</h2>
+        <p style="color: #6b7280; font-size: 14px;">
+            <strong>Quick Start:</strong><br>
+            1. Install prerequisites above<br>
+            2. Click "Start Servers" in extension popup<br>
+            3. Select device and click Connect<br>
+            4. Inspect elements in the Inspector tab
+        </p>
+        <p style="margin-top: 15px;">
+            <a href="https://github.com/user/locator-builder" target="_blank" style="color: #4f46e5;">📖 Full
+                Documentation</a>
+        </p>
+    </div>
+
+    <button id="save-btn">Save Settings</button>
+
+    <script src="options.js"></script>
+</body>
+
+</html>
