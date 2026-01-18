@@ -6,56 +6,95 @@ let serverStatus = { backend: false, appium: false };
 let logsTabId = null; // Track the logs tab
 let logHistory = []; // Store recent logs for initial load
 const MAX_LOG_HISTORY = 1000;
+let nativeHostAvailable = false; // Track native host availability
 
 // Connect to Native Host
 function connectToNativeHost() {
     const hostName = "com.locatorbuilder.host";
-    nativePort = chrome.runtime.connectNative(hostName);
+    try {
+        nativePort = chrome.runtime.connectNative(hostName);
+        nativeHostAvailable = true;
 
-    nativePort.onMessage.addListener((msg) => {
-        console.log("Received from native host:", msg);
-        if (msg.type === 'status') {
-            serverStatus = { backend: msg.backend, appium: msg.appium };
+        nativePort.onMessage.addListener((msg) => {
+            console.log("Received from native host:", msg);
+            if (msg.type === 'status') {
+                serverStatus = { backend: msg.backend, appium: msg.appium };
+                broadcastStatus();
+            } else if (msg.type === 'start-result') {
+                // Handle start result
+                checkStatus();
+            } else if (msg.type === 'log') {
+                const logMessage = {
+                    type: 'server-log',
+                    message: msg.message,
+                    level: msg.level || 'info',
+                    timestamp: Date.now()
+                };
+
+                // Store in history
+                logHistory.push(logMessage);
+                if (logHistory.length > MAX_LOG_HISTORY) {
+                    logHistory.shift();
+                }
+
+                // Broadcast to popup
+                chrome.runtime.sendMessage(logMessage).catch(() => { });
+
+                // Send to logs tab if open
+                if (logsTabId) {
+                    chrome.tabs.sendMessage(logsTabId, logMessage).catch(() => {
+                        // Tab might be closed
+                        logsTabId = null;
+                    });
+                }
+            }
+        });
+
+        nativePort.onDisconnect.addListener(() => {
+            console.log("Native host disconnected:", chrome.runtime.lastError);
+            nativeHostAvailable = false;
+            nativePort = null;
+            serverStatus = { backend: false, appium: false };
             broadcastStatus();
-        } else if (msg.type === 'start-result') {
-            // Handle start result
-            checkStatus();
-        } else if (msg.type === 'log') {
-            const logMessage = {
-                type: 'server-log',
-                message: msg.message,
-                level: msg.level || 'info',
-                timestamp: Date.now()
-            };
 
-            // Store in history
-            logHistory.push(logMessage);
-            if (logHistory.length > MAX_LOG_HISTORY) {
-                logHistory.shift();
+            // Notify if it was an error
+            if (chrome.runtime.lastError) {
+                chrome.runtime.sendMessage({
+                    type: 'native-host-error',
+                    error: chrome.runtime.lastError.message
+                }).catch(() => { });
             }
+        });
 
-            // Broadcast to popup
-            chrome.runtime.sendMessage(logMessage).catch(() => { });
-
-            // Send to logs tab if open
-            if (logsTabId) {
-                chrome.tabs.sendMessage(logsTabId, logMessage).catch(() => {
-                    // Tab might be closed
-                    logsTabId = null;
-                });
-            }
-        }
-    });
-
-    nativePort.onDisconnect.addListener(() => {
-        console.log("Native host disconnected");
+        // Initial status check
+        checkStatus();
+    } catch (error) {
+        console.error("Failed to connect to native host:", error);
+        nativeHostAvailable = false;
         nativePort = null;
-        serverStatus = { backend: false, appium: false };
-        broadcastStatus();
-    });
 
-    // Initial status check
-    checkStatus();
+        chrome.runtime.sendMessage({
+            type: 'native-host-unavailable',
+            error: error.message
+        }).catch(() => { });
+    }
+}
+
+// Check native host connection on startup
+function checkNativeHostConnection() {
+    if (!nativePort) {
+        connectToNativeHost();
+    }
+
+    // Wait a bit and check if connection succeeded
+    setTimeout(() => {
+        if (!nativeHostAvailable) {
+            console.warn('Native host not available');
+            chrome.runtime.sendMessage({
+                type: 'native-host-unavailable'
+            }).catch(() => { });
+        }
+    }, 1000);
 }
 
 function checkStatus() {
@@ -186,8 +225,8 @@ chrome.tabs.onRemoved.addListener((tabId) => {
     }
 });
 
-// Connect on startup
-connectToNativeHost();
+// Initialize native host connection on startup
+checkNativeHostConnection();
 
 // Listen for extension installation
 chrome.runtime.onInstalled.addListener(() => {
