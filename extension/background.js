@@ -21,6 +21,35 @@ function connectToNativeHost() {
                 serverStatus = { backend: msg.backend, appium: msg.appium };
                 broadcastStatus();
             } else if (msg.type === 'start-result') {
+                // Check for errors in the start result
+                const hasBackendError = msg.backend && !msg.backend.success;
+                const hasAppiumError = msg.appium && !msg.appium.success;
+
+                if (hasBackendError || hasAppiumError) {
+                    // Compile error messages
+                    const errors = [];
+                    if (hasBackendError) {
+                        errors.push({
+                            server: 'Backend',
+                            error: msg.backend.error,
+                            code: msg.backend.code
+                        });
+                    }
+                    if (hasAppiumError) {
+                        errors.push({
+                            server: 'Appium',
+                            error: msg.appium.error,
+                            code: msg.appium.code
+                        });
+                    }
+
+                    // Broadcast error to popup
+                    chrome.runtime.sendMessage({
+                        type: 'server-start-error',
+                        errors: errors
+                    }).catch(() => { });
+                }
+
                 // Handle start result
                 checkStatus();
             } else if (msg.type === 'log') {
@@ -52,16 +81,41 @@ function connectToNativeHost() {
 
         nativePort.onDisconnect.addListener(() => {
             console.log("Native host disconnected:", chrome.runtime.lastError);
+            const errorMsg = chrome.runtime.lastError?.message || 'Unknown error';
             nativeHostAvailable = false;
             nativePort = null;
             serverStatus = { backend: false, appium: false };
             broadcastStatus();
 
-            // Notify if it was an error
+            // Notify popup of the specific error
             if (chrome.runtime.lastError) {
+                const error = chrome.runtime.lastError.message;
+                let userMessage = error;
+                let helpNeeded = false;
+
+                // Provide helpful messages for common errors
+                if (error.includes('Specified native messaging host not found')) {
+                    userMessage = 'Native host not found. Please run install_host.sh (macOS/Linux) or install_host.bat (Windows) to install the native messaging host.';
+                    helpNeeded = true;
+                } else if (error.includes('Native host has exited')) {
+                    userMessage = 'Native host crashed. Check that Node.js is installed and in your PATH.';
+                    helpNeeded = true;
+                }
+
                 chrome.runtime.sendMessage({
                     type: 'native-host-error',
-                    error: chrome.runtime.lastError.message
+                    error: userMessage,
+                    needsHelp: helpNeeded
+                }).catch(() => { });
+
+                // If this happens during startup, also send as server-start-error
+                chrome.runtime.sendMessage({
+                    type: 'server-start-error',
+                    errors: [{
+                        server: 'Native Host',
+                        error: userMessage,
+                        code: 'NATIVE_HOST_ERROR'
+                    }]
                 }).catch(() => { });
             }
         });
@@ -114,17 +168,46 @@ function broadcastStatus() {
 
 // Listen for messages from Popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    console.log('[Background] Received message:', request.type);
+
     if (request.type === 'get-status') {
         sendResponse(serverStatus);
         // Also trigger a fresh check
         checkStatus();
     } else if (request.type === 'start-server') {
-        if (!nativePort) connectToNativeHost();
+        console.log('[Background] Start server requested, nativePort:', nativePort ? 'connected' : 'not connected');
+
+        if (!nativePort) {
+            console.log('[Background] Attempting to connect to native host...');
+            connectToNativeHost();
+
+            // Give it a moment to connect or fail (async operation)
+            setTimeout(() => {
+                if (nativePort) {
+                    console.log('[Background] Sending start command to native host');
+                    nativePort.postMessage({ command: 'start' });
+                    sendResponse({ success: true });
+                } else {
+                    console.error('[Background] Could not connect to native host after waiting');
+                    sendResponse({
+                        success: false,
+                        error: 'Could not connect to native host. Please run install_host.sh (macOS/Linux) or install_host.bat (Windows) first.'
+                    });
+                }
+            }, 100);
+            return true; // Will respond asynchronously
+        }
+
         if (nativePort) {
+            console.log('[Background] Sending start command to native host');
             nativePort.postMessage({ command: 'start' });
             sendResponse({ success: true });
         } else {
-            sendResponse({ success: false, error: 'Could not connect to native host' });
+            console.error('[Background] Could not connect to native host');
+            sendResponse({
+                success: false,
+                error: 'Could not connect to native host. Please run install_host.sh (macOS/Linux) or install_host.bat (Windows) first.'
+            });
         }
     } else if (request.type === 'stop-server') {
         if (nativePort) {

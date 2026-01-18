@@ -44,7 +44,7 @@ function loadInitialLogs() {
     chrome.runtime.sendMessage({ type: 'request-logs' });
 }
 
-function addLogEntry(message, level = 'info', timestamp = null, autoScroll = true) {
+function addLogEntry(message, level = 'info', timestamp = null) {
     // Hide empty state
     if (emptyState && !emptyState.classList.contains('hidden')) {
         emptyState.classList.add('hidden');
@@ -75,11 +75,15 @@ function addLogEntry(message, level = 'info', timestamp = null, autoScroll = tru
         entry.classList.add('hidden');
     }
 
+    // Check scroll position BEFORE appending (allow 50px threshold)
+    const threshold = 50;
+    const wasAtBottom = logsContent.scrollHeight - logsContent.scrollTop <= logsContent.clientHeight + threshold;
+
     // Add to DOM
     logsContent.appendChild(entry);
 
-    // Auto-scroll to bottom
-    if (autoScroll) {
+    // Auto-scroll only if user was already at the bottom
+    if (wasAtBottom && autoScroll) {
         logsContent.scrollTop = logsContent.scrollHeight;
     }
 

@@ -28,10 +28,26 @@ if not exist "%NATIVE_HOST_DIR%" (
 )
 
 echo [2/4] Creating native host wrapper script...
-REM Create host.bat wrapper
+REM Create host.bat wrapper with Node.js detection
 (
 echo @echo off
-echo node "%NATIVE_HOST_DIR%\launcher.js"
+echo REM Find Node.js dynamically
+echo where node ^>nul 2^>^&1
+echo if %%ERRORLEVEL%% == 0 ^(
+echo   node "%%~dp0launcher.js"
+echo ^) else ^(
+echo   REM Check common installation paths
+echo   if exist "C:\Program Files\nodejs\node.exe" ^(
+echo     "C:\Program Files\nodejs\node.exe" "%%~dp0launcher.js"
+echo   ^) else if exist "C:\Program Files ^(x86^)\nodejs\node.exe" ^(
+echo     "C:\Program Files ^(x86^)\nodejs\node.exe" "%%~dp0launcher.js"  
+echo   ^) else if exist "%%LOCALAPPDATA%%\Programs\nodejs\node.exe" ^(
+echo     "%%LOCALAPPDATA%%\Programs\nodejs\node.exe" "%%~dp0launcher.js"
+echo   ^) else ^(
+echo     echo ERROR: Node.js not found! Please install Node.js ^>^&2
+echo     exit /b 1
+echo   ^)
+echo ^)
 ) > "%NATIVE_HOST_DIR%\host.bat"
 
 echo [3/4] Creating manifest file...

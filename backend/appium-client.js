@@ -86,9 +86,13 @@ class AppiumClient {
 
             // Fix for macOS Tahoe 26.2: Don't let Appium use macOS version for iOS deployment target
             // Use a stable iOS version that's available in Xcode
-            if (!deviceInfo.platformVersion) {
-                baseCapabilities['appium:platformVersion'] = '18.2';
-                console.log('📱 Setting platformVersion to 18.2 to match simulator (Tahoe workaround)');
+            // Use the detected version from device-manager
+            if (deviceInfo.version) {
+                baseCapabilities['appium:platformVersion'] = deviceInfo.version;
+            } else if (!deviceInfo.platformVersion) {
+                // Fallback only if no version info available
+                baseCapabilities['appium:platformVersion'] = '17.5';
+                console.log('📱 Setting fallback platformVersion to 17.5');
             }
 
             // Only set bundleId if provided

@@ -121,6 +121,48 @@
         <h2>📋 Prerequisites</h2>
         <p style="margin-bottom: 15px; color: #6b7280;">Install these before using the extension:</p>
 
+        <div class="prereq-item"
+            style="background-color: #fef3c7; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
+            <strong style="color: #92400e;">⚠️ IMPORTANT: Native Host Installation (Required First)</strong>
+            <div style="color: #78350f; font-size: 13px; margin-top: 8px;">
+                <strong>The extension cannot start servers without this step!</strong><br><br>
+
+                <div style="background: white; padding: 12px; border-radius: 6px; margin: 10px 0;">
+                    <strong style="color: #111827;">Step 1: Download Installer</strong><br>
+                    <div style="margin-top: 10px;">
+                        <button id="download-mac"
+                            style="margin-right: 10px; padding: 8px 16px; background: #4f46e5; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 500; font-size: 13px;">
+                            📥 Download for macOS/Linux (.sh)
+                        </button>
+                        <button id="download-windows"
+                            style="padding: 8px 16px; background: #4f46e5; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 500; font-size: 13px;">
+                            📥 Download for Windows (.bat)
+                        </button>
+                    </div>
+                    <div id="download-status" style="margin-top: 8px; font-size: 12px; color: #059669;"></div>
+                </div>
+
+                <strong style="color: #111827;">Step 2: Run the Installer</strong><br>
+                <div style="margin-top: 8px;">
+                    <strong>macOS / Linux:</strong><br>
+                    1. Open Terminal<br>
+                    2. Navigate to Downloads: <code>cd ~/Downloads</code><br>
+                    3. Run: <code>bash install_host.sh</code><br><br>
+
+                    <strong>Windows:</strong><br>
+                    1. Open Command Prompt<br>
+                    2. Navigate to Downloads: <code>cd %USERPROFILE%\Downloads</code><br>
+                    3. Run: <code>install_host.bat</code><br><br>
+                </div>
+
+                <strong style="color: #111827;">Step 3: Reload Extension</strong><br>
+                Go to <code>chrome://extensions</code> and click the reload icon for LocatorLens<br><br>
+
+                <strong>What this does:</strong> Installs the native messaging host that allows the extension to start
+                and manage servers.
+            </div>
+        </div>
+
         <div class="prereq-item">
             <strong>1. Node.js</strong> (v18+)
             <div style="color: #6b7280; font-size: 13px;">Download from <a href="https://nodejs.org"
@@ -153,10 +195,12 @@
         <h2>❓ Help</h2>
         <p style="color: #6b7280; font-size: 14px;">
             <strong>Quick Start:</strong><br>
-            1. Install prerequisites above<br>
-            2. Click "Start Servers" in extension popup<br>
-            3. Select device and click Connect<br>
-            4. Inspect elements in the Inspector tab
+            1. Install Node.js and run the native host installation script (see important step above)<br>
+            2. Install Appium and other prerequisites<br>
+            3. Reload this extension in Chrome<br>
+            4. Click "Start Servers" in extension popup<br>
+            5. Select device and click Connect<br>
+            6. Inspect elements in the Inspector tab
         </p>
         <p style="margin-top: 15px;">
             <a href="https://github.com/user/locator-builder" target="_blank" style="color: #4f46e5;">📖 Full

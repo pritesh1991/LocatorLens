@@ -1,9 +1,0 @@
-{
-  "name": "com.locatorbuilder.host",
-  "description": "Locator Builder Native Host",
-  "path": "/Users/priteshpatel/locator-builder/native-host/host.sh",
-  "type": "stdio",
-  "allowed_origins": [
-    "chrome-extension://ajcdeghbgfonhphbnkmbmocekkmdeoke/"
-  ]
-}
