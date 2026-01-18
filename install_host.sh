@@ -63,8 +63,14 @@ EOF
 
 echo "[3/4] Installing native host..."
 
-# Install for Chrome
-if [ -d "$HOME/Library/Application Support/Google/Chrome" ] || [ -d "$HOME/.config/google-chrome" ]; then
+# Install for Chrome - Check parent directory existence based on OS
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    CHROME_PARENT="$HOME/Library/Application Support/Google/Chrome"
+elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    CHROME_PARENT="$HOME/.config/google-chrome"
+fi
+
+if [ -n "$CHROME_PARENT" ] && [ -d "$CHROME_PARENT" ]; then
     mkdir -p "$CHROME_DIR"
     cp "$NATIVE_HOST_DIR/$HOST_NAME.json" "$CHROME_DIR/"
     echo "  ✓ Chrome: Installed"
@@ -72,8 +78,14 @@ else
     echo "  ⊗ Chrome: Not found (skipped)"
 fi
 
-# Install for Edge (if available)
-if [ -d "$HOME/Library/Application Support/Microsoft Edge" ] || [ -d "$HOME/.config/microsoft-edge" ]; then
+# Install for Edge (if available) - Check parent directory existence based on OS
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    EDGE_PARENT="$HOME/Library/Application Support/Microsoft Edge"
+elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    EDGE_PARENT="$HOME/.config/microsoft-edge"
+fi
+
+if [ -n "$EDGE_PARENT" ] && [ -d "$EDGE_PARENT" ]; then
     mkdir -p "$EDGE_DIR"
     cp "$NATIVE_HOST_DIR/$HOST_NAME.json" "$EDGE_DIR/"
     echo "  ✓ Edge: Installed"

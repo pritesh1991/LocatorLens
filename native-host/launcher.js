@@ -152,7 +152,11 @@ function startBackend() {
         });
 
         backendProcess.stderr.on('data', (data) => {
-            log(`[Backend] ${data.toString().trim()}`, 'error');
+            const msg = data.toString().trim();
+            log(`[Backend] ${msg}`, 'error');
+            if (msg.includes("Cannot find module") || msg.includes("MODULE_NOT_FOUND")) {
+                log("ACTION REQUIRED: Backend dependencies missing. Please run 'npm install' in the 'backend' directory.", 'error');
+            }
         });
 
         backendProcess.on('close', (code) => {
@@ -169,10 +173,40 @@ function startBackend() {
     }
 }
 
+// Find Appium Path
+function findAppiumPath() {
+    // 1. Try which command
+    try {
+        const result = execSync('which appium', { encoding: 'utf-8' }).trim();
+        if (result && fs.existsSync(result)) return result;
+    } catch (e) { }
+
+    // 2. Check common locations
+    const commonPaths = [
+        '/usr/local/bin/appium',
+        '/opt/homebrew/bin/appium',
+        path.join(process.env.HOME || '', '.npm-global/bin/appium'),
+        path.join(process.env.HOME || '', 'npm/bin/appium')
+    ];
+
+    for (const p of commonPaths) {
+        if (fs.existsSync(p)) return p;
+    }
+
+    return null;
+}
+
 // Start Appium Server
 function startAppium() {
     if (appiumProcess) {
         return { success: true, message: 'Appium already running', pid: appiumProcess.pid };
+    }
+
+    const appiumPath = findAppiumPath();
+    if (!appiumPath) {
+        const errorMsg = 'Appium is not installed or not found in PATH. Please install it using: npm install -g appium';
+        log(errorMsg, 'error');
+        return { success: false, error: errorMsg, code: 'APPIUM_NOT_FOUND' };
     }
 
     try {
@@ -189,8 +223,8 @@ function startAppium() {
             // No process on port, that's fine
         }
 
-        log('Starting Appium Server...');
-        appiumProcess = spawn('appium', [], {
+        log(`Starting Appium Server from: ${appiumPath}`);
+        appiumProcess = spawn(appiumPath, [], {
             detached: false,
             shell: true,
             env: SPAWN_ENV
@@ -201,7 +235,13 @@ function startAppium() {
         });
 
         appiumProcess.stderr.on('data', (data) => {
-            log(`[Appium] ${data.toString().trim()}`, 'error');
+            const errorText = data.toString().trim();
+            log(`[Appium] ${errorText}`, 'error');
+
+            // Check for common errors
+            if (errorText.includes('EADDRINUSE') || errorText.includes('address already in use')) {
+                log('Port 4723 is already in use. Please stop other Appium instances.', 'error');
+            }
         });
 
         appiumProcess.on('close', (code) => {
@@ -213,8 +253,9 @@ function startAppium() {
         log(`Appium started with PID ${appiumProcess.pid}`);
         return { success: true, pid: appiumProcess.pid };
     } catch (error) {
-        log(`Error starting appium: ${error.message}`, 'error');
-        return { success: false, error: error.message };
+        const errorMsg = `Error starting Appium: ${error.message}`;
+        log(errorMsg, 'error');
+        return { success: false, error: errorMsg, code: 'APPIUM_START_ERROR' };
     }
 }
 

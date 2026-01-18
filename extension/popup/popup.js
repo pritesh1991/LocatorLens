@@ -14,6 +14,12 @@ const logsToggle = document.getElementById('logs-toggle');
 const logsContent = document.getElementById('logs-content');
 const openLogsBtn = document.getElementById('open-logs-btn');
 
+// Error Modal Elements
+const errorModal = document.getElementById('error-modal');
+const errorModalBody = document.getElementById('error-modal-body');
+const errorModalClose = document.getElementById('error-modal-close');
+const errorHelpBtn = document.getElementById('error-help-btn');
+
 // State
 let devices = [];
 let selectedPlatform = null;
@@ -51,10 +57,28 @@ function setupEventListeners() {
         });
     }
 
-    // Listen for log messages from background
+    // Error modal listeners
+    if (errorModalClose) {
+        errorModalClose.addEventListener('click', hideErrorModal);
+    }
+    if (errorHelpBtn) {
+        errorHelpBtn.addEventListener('click', handleSettings);
+    }
+    // Close modal when clicking outside
+    if (errorModal) {
+        errorModal.addEventListener('click', (e) => {
+            if (e.target === errorModal) {
+                hideErrorModal();
+            }
+        });
+    }
+
+    // Listen for messages from background
     chrome.runtime.onMessage.addListener((message) => {
         if (message.type === 'server-log') {
             addLogEntry(message.message, message.level);
+        } else if (message.type === 'server-start-error') {
+            handleServerStartError(message.errors);
         }
     });
 }
@@ -68,10 +92,16 @@ function addLogEntry(message, level = 'info') {
     const entry = document.createElement('div');
     entry.className = `log-entry log-${level}`;
     entry.textContent = message;
+    // Check scroll position BEFORE appending (allow 20px threshold)
+    const threshold = 20;
+    const wasAtBottom = logsContent.scrollHeight - logsContent.scrollTop <= logsContent.clientHeight + threshold;
+
     logsContent.appendChild(entry);
 
-    // Auto-scroll to bottom
-    logsContent.scrollTop = logsContent.scrollHeight;
+    // Auto-scroll only if user was already at the bottom
+    if (wasAtBottom) {
+        logsContent.scrollTop = logsContent.scrollHeight;
+    }
 
     // Keep only last 100 entries
     while (logsContent.children.length > 100) {
@@ -127,16 +157,24 @@ async function handleServerToggle() {
     const isRunning = serverStatus.backend || serverStatus.appium;
     const command = isRunning ? 'stop-server' : 'start-server';
 
+    console.log('[Popup] Server button clicked, current status:', serverStatus);
+    console.log('[Popup] Sending command:', command);
+
     serverBtn.disabled = true;
     serverBtn.textContent = isRunning ? 'Stopping...' : 'Starting...';
 
     chrome.runtime.sendMessage({ type: command }, (response) => {
+        console.log('[Popup] Received response:', response);
+        console.log('[Popup] Chrome runtime error:', chrome.runtime.lastError);
+
         serverBtn.disabled = false;
         if (response && response.success) {
             // Status update will happen via polling/message
             setTimeout(updateServerStatus, 1000);
         } else {
-            showError(`Failed to ${isRunning ? 'stop' : 'start'} server: ${response?.error || 'Unknown error'}`);
+            const errorMsg = response?.error || chrome.runtime.lastError?.message || 'Unknown error';
+            console.error('[Popup] Server toggle failed:', errorMsg);
+            showError(`Failed to ${isRunning ? 'stop' : 'start'} server: ${errorMsg}`);
         }
     });
 }
@@ -293,6 +331,52 @@ function resetConnectButton() {
 function openLogsInNewTab() {
     // Request background script to open/focus logs tab
     chrome.runtime.sendMessage({ type: 'open-logs-tab' });
+}
+
+// Error Modal Functions
+function showErrorModal(errors) {
+    if (!errorModal || !errorModalBody) return;
+
+    // Clear previous errors
+    errorModalBody.innerHTML = '';
+
+    // Add each error
+    errors.forEach(error => {
+        const errorItem = document.createElement('div');
+        errorItem.className = 'error-item';
+
+        const serverName = document.createElement('div');
+        serverName.className = 'error-server';
+        serverName.textContent = `${error.server} Error:`;
+
+        const errorText = document.createElement('div');
+        errorText.className = 'error-text';
+        errorText.textContent = error.error;
+
+        errorItem.appendChild(serverName);
+        errorItem.appendChild(errorText);
+        errorModalBody.appendChild(errorItem);
+    });
+
+    // Show modal
+    errorModal.classList.remove('hidden');
+}
+
+function hideErrorModal() {
+    if (errorModal) {
+        errorModal.classList.add('hidden');
+    }
+}
+
+function handleServerStartError(errors) {
+    // Auto-expand logs section to show error details
+    if (!logsContent.classList.contains('visible')) {
+        logsContent.classList.add('visible');
+        logsToggle.classList.add('expanded');
+    }
+
+    // Show error modal
+    showErrorModal(errors);
 }
 
 // Add spinning animation

@@ -95,6 +95,22 @@
       <a href="#" id="settings-link">Settings</a>
       <span class="version">v1.0.0</span>
     </div>
+
+    <!-- Error Modal -->
+    <div id="error-modal" class="error-modal hidden">
+      <div class="error-modal-content">
+        <div class="error-modal-header">
+          <h3>Server Startup Failed</h3>
+          <button id="error-modal-close" class="error-modal-close">&times;</button>
+        </div>
+        <div class="error-modal-body" id="error-modal-body">
+          <!-- Error content will be inserted here -->
+        </div>
+        <div class="error-modal-footer">
+          <button id="error-help-btn" class="btn btn-primary btn-sm">View Help & Prerequisites</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="popup.js"></script>
