@@ -13,6 +13,8 @@ let isInteractMode = false; // Toggle between inspect and interact modes
 let fpsCounter = 0;
 let lastFpsUpdate = Date.now();
 let coordinateScale = 1.0; // Scale factor between Screenshot Pixels and XML Points (e.g. 3.0 for iPhone Pro)
+let elementToNodeMap = new WeakMap(); // Map XML elements to DOM tree nodes
+let nodeIdCounter = 0; // Counter for generating unique node IDs
 
 // DOM Elements
 const deviceNameEl = document.getElementById('device-name');
@@ -215,7 +217,7 @@ function updateScreenshot(base64Data) {
         lastFpsUpdate = now;
     }
 
-    // Detect significant screen changes and show badge (don't auto-refresh)
+    // Detect screen changes and auto-refresh page source
     detectScreenChange();
 }
 
@@ -224,9 +226,18 @@ let pageSourceSnapshot = null;
 let pageSourceSnapshotContext = null;
 
 function detectScreenChange() {
-    if (!screenImage.classList.contains('loaded')) return;
-    if (!pageSourceSnapshot) return; // No snapshot yet = nothing to compare
-    if (!screenImage.complete) return; // Wait for image to fully load
+    if (!screenImage.classList.contains('loaded')) {
+        console.log('⏩ Screen change detection skipped: image not loaded');
+        return;
+    }
+    if (!pageSourceSnapshot) {
+        console.log('⏩ Screen change detection skipped: no snapshot yet (will capture on first page source)');
+        return; // No snapshot yet = nothing to compare
+    }
+    if (!screenImage.complete) {
+        console.log('⏩ Screen change detection skipped: image not complete');
+        return; // Wait for image to fully load
+    }
 
     try {
         const width = screenImage.naturalWidth;
@@ -266,10 +277,14 @@ function detectScreenChange() {
             }
         }
 
-        // If > 5% of sampled pixels changed since last page source, auto-refresh
-        if (diffPixels > sampledPixels * 0.05) {
-            console.log(`Significant screen change detected (${diffPixels}/${sampledPixels} pixels), auto-refreshing...`);
-            refreshPageSource(true); // Silent refresh (won't show loading spinner)
+        // Auto-refresh if >1% pixel change detected
+        const changePercent = (diffPixels / sampledPixels * 100);
+
+        if (diffPixels > sampledPixels * 0.01) {
+            console.log(`🔄 Screen change detected (${changePercent.toFixed(1)}% pixels changed), refreshing page source...`);
+            refreshPageSource(true);
+        } else {
+            // Uncomment for debugging: console.log(`✅ No change (${changePercent.toFixed(2)}%)`);
         }
 
     } catch (e) {
@@ -633,39 +648,45 @@ function clearElementHighlight() {
 }
 
 function highlightElementInTree(xmlElement) {
-    // This is a simplified version - in production you'd need better element matching
-    const resourceId = xmlElement.getAttribute('resource-id');
-    const text = xmlElement.getAttribute('text');
-    const contentDesc = xmlElement.getAttribute('content-desc');
-    const name = xmlElement.getAttribute('name');
-    const label = xmlElement.getAttribute('label');
+    // Use direct element-to-node mapping for precise navigation
+    const headerDiv = elementToNodeMap.get(xmlElement);
 
-    // Find matching node in tree
-    let found = false;
-    document.querySelectorAll('.tree-node-header').forEach(header => {
-        if (found) return; // Optimization
+    if (!headerDiv) {
+        console.warn('Element not found in tree map');
+        return;
+    }
 
-        const headerText = header.textContent;
-
-        const matches =
-            (resourceId && headerText.includes(resourceId)) ||
-            (text && headerText.includes(text)) ||
-            (contentDesc && headerText.includes(contentDesc)) ||
-            (name && headerText.includes(name)) ||
-            (label && headerText.includes(label));
-
-        if (matches) {
-            // Clear previous selections
-            document.querySelectorAll('.tree-node-header.selected').forEach(el => {
-                el.classList.remove('selected');
-            });
-
-            // Select this one
-            header.classList.add('selected');
-            header.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            found = true;
-        }
+    // Clear previous selections
+    document.querySelectorAll('.tree-node-header.selected').forEach(el => {
+        el.classList.remove('selected');
     });
+
+    // Select this element
+    headerDiv.classList.add('selected');
+
+    // Expand all parent nodes in the path to this element
+    let parent = headerDiv.parentElement; // Start with .tree-node
+    while (parent) {
+        if (parent.classList.contains('tree-children')) {
+            parent.classList.add('expanded');
+
+            // Also expand the toggle arrow of the parent header
+            const parentNode = parent.parentElement; // .tree-node
+            if (parentNode) {
+                const parentHeader = parentNode.querySelector(':scope > .tree-node-header');
+                if (parentHeader) {
+                    const toggle = parentHeader.querySelector('.tree-toggle');
+                    if (toggle) {
+                        toggle.classList.add('expanded');
+                    }
+                }
+            }
+        }
+        parent = parent.parentElement;
+    }
+
+    // Scroll into view
+    headerDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 
@@ -695,6 +716,30 @@ function updatePageSource(xmlString) {
     refreshBtn.classList.remove('spinning'); // Stop button animation
     hideStaleIndicator(); // Clear stale indicator since we just refreshed
     capturePageSourceSnapshot(); // Save screen snapshot for change detection
+
+    // Clear stale UI state from previous page source
+    clearElementHighlight(); // Remove highlight box from screen
+    selectedElement = null; // Clear selected element
+    isElementLocked = false; // Unlock element selection
+
+    // Clear any tree selections
+    document.querySelectorAll('.tree-node-header.selected').forEach(el => {
+        el.classList.remove('selected');
+    });
+
+    // Clear search highlights
+    clearSearchHighlights();
+
+    // Reset element details to empty state
+    elementDetails.innerHTML = `
+        <div class="empty-state">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
+                <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.5" />
+                <path d="M9 9L15 15M15 9L9 15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            </svg>
+            <p>Select an element to view details</p>
+        </div>
+    `;
 
     // Parse XML once
     const parser = new DOMParser();
@@ -772,6 +817,10 @@ function updatePageSource(xmlString) {
     const allElements = xmlDoc.getElementsByTagName('*');
     elementCount.textContent = `${allElements.length} elements`;
 
+    // Reset element-to-node mapping for new page source
+    elementToNodeMap = new WeakMap();
+    nodeIdCounter = 0;
+
     // Render tree
     sourceTree.innerHTML = '';
     renderTree(xmlDoc.documentElement, sourceTree);
@@ -788,6 +837,10 @@ function renderTree(xmlNode, container, level = 0) {
     const headerDiv = document.createElement('div');
     headerDiv.className = 'tree-node-header';
     headerDiv.dataset.level = level;
+    headerDiv.dataset.elementId = nodeIdCounter++; // Assign unique ID
+
+    // Store mapping from XML element to DOM tree node
+    elementToNodeMap.set(xmlNode, headerDiv);
 
     const hasChildren = xmlNode.children && xmlNode.children.length > 0;
 
@@ -911,6 +964,9 @@ function selectElement(xmlNode, headerDiv) {
     // Add new selection
     headerDiv.classList.add('selected');
 
+    // Draw highlight on screen mirror
+    drawElementHighlight(xmlNode, true);
+
     // Extract attributes
     const attributes = LocatorGenerator.extractAttributes(xmlNode);
     const xpath = LocatorGenerator.generateXPath(xmlNode);
@@ -923,6 +979,94 @@ function selectElement(xmlNode, headerDiv) {
 
     // Generate and display locators
     displayElementDetails(selectedElement);
+}
+
+function countMatchingElements(locator) {
+    if (!currentXmlDoc) return 0;
+
+    try {
+        let count = 0;
+        const strategy = locator.strategy;
+        const value = locator.value;
+
+        // Count based on strategy type
+        if (strategy === 'id' || strategy === 'resource-id') {
+            // Android Resource ID
+            count = currentXmlDoc.querySelectorAll(`[resource-id="${value}"]`).length;
+        } else if (strategy === 'accessibility id') {
+            // iOS name or Android content-desc
+            const nameMatches = currentXmlDoc.querySelectorAll(`[name="${value}"]`).length;
+            const descMatches = currentXmlDoc.querySelectorAll(`[content-desc="${value}"]`).length;
+            count = nameMatches + descMatches;
+        } else if (strategy === 'class name') {
+            count = currentXmlDoc.querySelectorAll(`[class="${value}"]`).length;
+        } else if (strategy === 'xpath') {
+            // Use XPath evaluator
+            try {
+                const result = currentXmlDoc.evaluate(
+                    value,
+                    currentXmlDoc,
+                    null,
+                    XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
+                    null
+                );
+                count = result.snapshotLength;
+            } catch (e) {
+                console.warn('XPath evaluation error:', e);
+                count = 0;
+            }
+        } else if (strategy === '-android uiautomator') {
+            // UiAutomator - extract the selector and count
+            if (value.includes('resourceId')) {
+                const match = value.match(/resourceId\("([^"]+)"\)/);
+                if (match) {
+                    count = currentXmlDoc.querySelectorAll(`[resource-id="${match[1]}"]`).length;
+                }
+            } else if (value.includes('text')) {
+                const match = value.match(/text\("([^"]+)"\)/);
+                if (match) {
+                    count = currentXmlDoc.querySelectorAll(`[text="${match[1]}"]`).length;
+                }
+            }
+        } else if (strategy === '-ios predicate string') {
+            // iOS Predicate - parse simple predicates
+            if (value.includes('name ==')) {
+                const match = value.match(/name\s*==\s*"([^"]+)"/);
+                if (match) {
+                    count = currentXmlDoc.querySelectorAll(`[name="${match[1]}"]`).length;
+                }
+            } else if (value.includes('label ==')) {
+                const match = value.match(/label\s*==\s*"([^"]+)"/);
+                if (match) {
+                    count = currentXmlDoc.querySelectorAll(`[label="${match[1]}"]`).length;
+                }
+            } else if (value.includes('value ==')) {
+                const match = value.match(/value\s*==\s*"([^"]+)"/);
+                if (match) {
+                    count = currentXmlDoc.querySelectorAll(`[value="${match[1]}"]`).length;
+                }
+            }
+        } else if (strategy === '-ios class chain') {
+            // iOS Class Chain - simplified count
+            if (value.includes('name ==')) {
+                const match = value.match(/name\s*==\s*"([^"]+)"/);
+                if (match) {
+                    count = currentXmlDoc.querySelectorAll(`[name="${match[1]}"]`).length;
+                }
+            } else {
+                // Just type-based, count all of that type
+                const typeMatch = value.match(/XCUIElementType(\w+)/);
+                if (typeMatch) {
+                    count = currentXmlDoc.getElementsByTagName(`XCUIElementType${typeMatch[1]}`).length;
+                }
+            }
+        }
+
+        return count;
+    } catch (e) {
+        console.error('Error counting elements:', e);
+        return 0;
+    }
 }
 
 function displayElementDetails(element) {
@@ -969,13 +1113,22 @@ function displayElementDetails(element) {
             html += '<p class="empty-state">No locators generated for this element.</p>';
         } else {
             locators.forEach((locator, index) => {
+                // Count matching elements for this locator
+                const matchCount = countMatchingElements(locator);
+                const isUnique = matchCount === 1;
+                const countClass = isUnique ? 'count-unique' : 'count-multiple';
+                const countIcon = isUnique ? '✓' : '⚠';
+
                 html += `
               <div class="locator-item">
                 <div class="locator-header">
                   <span class="locator-type">${locator.type}</span>
-                  <button class="copy-btn" onclick="copyToClipboard('${escapeHtml(locator.code)}', this)">
-                    Copy
-                  </button>
+                  <div class="locator-actions">
+                    <span class="match-count ${countClass}" title="${matchCount} matching element(s)">${countIcon} ${matchCount}</span>
+                    <button class="copy-btn" data-copy-text="${locator.code.replace(/"/g, '&quot;')}">
+                      Copy
+                    </button>
+                  </div>
                 </div>
                 <div class="locator-value">${escapeHtml(locator.code)}</div>
               </div>
@@ -1002,7 +1155,7 @@ function displayElementDetails(element) {
                     <div class="result-label">Return Value:</div>
                     <div class="result-value-box">
                         <code id="method-result-value">${methods[0].value}</code>
-                        <button class="copy-icon-btn" title="Copy Value" onclick="copyToClipboard(document.getElementById('method-result-value').textContent, this)">
+                        <button class="copy-icon-btn" title="Copy Value" data-copy-source="method-result-value">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
@@ -1039,12 +1192,40 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// Event delegation for copy buttons (CSP-safe approach)
+// Attach once to the element details container
+elementDetails.addEventListener('click', async (e) => {
+    const copyBtn = e.target.closest('.copy-btn, .copy-icon-btn');
+    if (!copyBtn) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    let textToCopy = '';
+
+    // Check if it's a copy button with data-copy-text attribute
+    if (copyBtn.hasAttribute('data-copy-text')) {
+        textToCopy = copyBtn.getAttribute('data-copy-text');
+    }
+    // Or if it's a copy icon button with data-copy-source
+    else if (copyBtn.hasAttribute('data-copy-source')) {
+        const sourceId = copyBtn.getAttribute('data-copy-source');
+        const sourceElement = document.getElementById(sourceId);
+        if (sourceElement) {
+            textToCopy = sourceElement.textContent;
+        }
+    }
+
+    if (textToCopy) {
+        // No need to unescape - data attributes already contain raw text
+        await copyToClipboard(textToCopy, copyBtn);
+    }
+});
+
 window.copyToClipboard = async (text, button) => {
     try {
-        // Unescape HTML entities first
-        const textarea = document.createElement('textarea');
-        textarea.innerHTML = text;
-        const plainText = textarea.value;
+        // Use text directly - no need to unescape from HTML entities
+        const plainText = text;
 
         // Try modern clipboard API first
         let copied = false;
@@ -1096,8 +1277,17 @@ window.copyToClipboard = async (text, button) => {
     }
 };
 
+function clearSearchHighlights() {
+    document.querySelectorAll('.tree-node-header.search-match').forEach(el => {
+        el.classList.remove('search-match');
+    });
+}
+
 function handleSearch(e) {
     const searchTerm = e.target.value.toLowerCase();
+
+    // Clear previous search highlighting
+    clearSearchHighlights();
 
     if (!searchTerm) {
         // Reset: Show all, but don't change expansion state
@@ -1110,6 +1300,8 @@ function handleSearch(e) {
     // 1. Hide everything first
     document.querySelectorAll('.tree-node-header').forEach(el => el.style.display = 'none');
 
+    let firstMatch = null;
+
     // 2. Find matches
     document.querySelectorAll('.tree-node-header').forEach(el => {
         const text = el.textContent.toLowerCase();
@@ -1117,6 +1309,14 @@ function handleSearch(e) {
         if (text.includes(searchTerm)) {
             // Show match
             el.style.display = '';
+
+            // Add search highlight class
+            el.classList.add('search-match');
+
+            // Track first match
+            if (!firstMatch) {
+                firstMatch = el;
+            }
 
             // 3. Walk up to reveal and expand ancestors
             let parent = el.parentElement; // .tree-node
@@ -1142,6 +1342,20 @@ function handleSearch(e) {
             }
         }
     });
+
+    // 4. Auto-select and scroll to first match
+    if (firstMatch) {
+        // Clear previous selections
+        document.querySelectorAll('.tree-node-header.selected').forEach(el => {
+            el.classList.remove('selected');
+        });
+
+        // Select first match
+        firstMatch.classList.add('selected');
+
+        // Scroll into view
+        firstMatch.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
 }
 
 function updateConnectionStatus(connected) {

@@ -274,6 +274,18 @@ body {
     border-left: 2px solid var(--primary-color);
 }
 
+.tree-node-header.search-match {
+    background: rgba(245, 158, 11, 0.2);
+    border-left: 2px solid var(--warning);
+}
+
+/* Search match takes precedence over hover but selected takes precedence over search-match */
+.tree-node-header.search-match.selected {
+    background: rgba(102, 126, 234, 0.3);
+    border-left: 2px solid var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.3);
+}
+
 .tree-toggle {
     width: 14px;
     height: 14px;
@@ -390,6 +402,34 @@ body {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 8px;
+}
+
+.locator-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.match-count {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.match-count.count-unique {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--success);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.match-count.count-multiple {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--warning);
+    border: 1px solid rgba(245, 158, 11, 0.3);
 }
 
 .locator-type {

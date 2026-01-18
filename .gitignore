@@ -3,3 +3,4 @@ node_modules/
 .DS_Store
 backend/temp_*.png
 .env
+*.zip

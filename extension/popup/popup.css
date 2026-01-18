@@ -59,33 +59,6 @@ body {
   background-clip: text;
 }
 
-.status {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 500;
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  animation: pulse 2s ease-in-out infinite;
-}
-
-.status-connected .status-dot {
-  background: var(--success);
-}
-
-.status-disconnected .status-dot {
-  background: var(--error);
-  animation: none;
-}
-
 @keyframes pulse {
 
   0%,
@@ -318,6 +291,39 @@ body {
 
 .logs-header:hover {
   background: var(--bg-tertiary);
+}
+
+.logs-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.open-logs-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+  opacity: 0;
+}
+
+.logs-header:hover .open-logs-btn {
+  opacity: 1;
+}
+
+.open-logs-btn:hover {
+  background: rgba(102, 126, 234, 0.1);
+  color: #667eea;
+}
+
+.open-logs-btn:active {
+  transform: scale(0.95);
 }
 
 .logs-content {

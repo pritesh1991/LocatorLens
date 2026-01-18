@@ -38,7 +38,7 @@ class LocatorGenerator {
                 type: 'Resource ID',
                 strategy: 'id',
                 value: attrs['resource-id'],
-                code: `driver.findElement(By.id("${attrs['resource-id']}"))`,
+                code: `By.id("${attrs['resource-id']}")`,
                 priority: 9
             });
         }
@@ -49,7 +49,7 @@ class LocatorGenerator {
                 type: 'Content Desc',
                 strategy: 'accessibility id',
                 value: attrs['content-desc'],
-                code: `driver.findElement(MobileBy.AccessibilityId("${attrs['content-desc']}"))`,
+                code: `MobileBy.AccessibilityId("${attrs['content-desc']}")`,
                 priority: 8
             });
         }
@@ -61,7 +61,7 @@ class LocatorGenerator {
                 type: 'UiAutomator (ID)',
                 strategy: '-android uiautomator',
                 value: uiAutomator,
-                code: `driver.findElement(MobileBy.AndroidUIAutomator("${uiAutomator}"))`,
+                code: `MobileBy.AndroidUIAutomator("${uiAutomator}")`,
                 priority: 7
             });
         }
@@ -72,7 +72,7 @@ class LocatorGenerator {
                 type: 'UiAutomator (Text)',
                 strategy: '-android uiautomator',
                 value: uiAutomator,
-                code: `driver.findElement(MobileBy.AndroidUIAutomator("${uiAutomator}"))`,
+                code: `MobileBy.AndroidUIAutomator("${uiAutomator}")`,
                 priority: 6
             });
         }
@@ -94,7 +94,7 @@ class LocatorGenerator {
                 type: 'Accessibility ID',
                 strategy: 'accessibility id',
                 value: attrs.name,
-                code: `driver.findElement(MobileBy.AccessibilityId("${attrs.name}"))`,
+                code: `MobileBy.AccessibilityId("${attrs.name}")`,
                 priority: 9
             });
         }
@@ -105,7 +105,7 @@ class LocatorGenerator {
                 type: 'Accessibility ID (Label)',
                 strategy: 'accessibility id',
                 value: attrs.label,
-                code: `driver.findElement(MobileBy.AccessibilityId("${attrs.label}"))`,
+                code: `MobileBy.AccessibilityId("${attrs.label}")`,
                 priority: 9
             });
         }
@@ -118,7 +118,7 @@ class LocatorGenerator {
                 type: 'Predicate (Name)',
                 strategy: '-ios predicate string',
                 value: predicate,
-                code: `driver.findElement(MobileBy.iOSNsPredicateString("${predicate}"))`,
+                code: `MobileBy.iOSNsPredicateString("${predicate}")`,
                 priority: 8
             });
         }
@@ -130,7 +130,7 @@ class LocatorGenerator {
                 type: 'Predicate (Label)',
                 strategy: '-ios predicate string',
                 value: predicate,
-                code: `driver.findElement(MobileBy.iOSNsPredicateString("${predicate}"))`,
+                code: `MobileBy.iOSNsPredicateString("${predicate}")`,
                 priority: 8
             });
         }
@@ -143,7 +143,7 @@ class LocatorGenerator {
                 type: 'Predicate (Value)',
                 strategy: '-ios predicate string',
                 value: predicate,
-                code: `driver.findElement(MobileBy.iOSNsPredicateString("${predicate}"))`,
+                code: `MobileBy.iOSNsPredicateString("${predicate}")`,
                 priority: 7
             });
         }
@@ -156,7 +156,7 @@ class LocatorGenerator {
                 type: 'Class Chain',
                 strategy: '-ios class chain',
                 value: classChain,
-                code: `driver.findElement(MobileBy.iOSClassChain("${classChain}"))`,
+                code: `MobileBy.iOSClassChain("${classChain}")`,
                 priority: 7
             });
 
@@ -167,7 +167,7 @@ class LocatorGenerator {
                     type: 'Class Chain (Named)',
                     strategy: '-ios class chain',
                     value: specificChain,
-                    code: `driver.findElement(MobileBy.iOSClassChain("${specificChain}"))`,
+                    code: `MobileBy.iOSClassChain("${specificChain}")`,
                     priority: 8
                 });
             }
@@ -189,7 +189,7 @@ class LocatorGenerator {
                 type: 'Class Name',
                 strategy: 'class name',
                 value: attrs.class,
-                code: `driver.findElement(By.className("${attrs.class}"))`,
+                code: `By.className("${attrs.class}")`,
                 priority: 4
             });
         }
@@ -200,7 +200,7 @@ class LocatorGenerator {
                 type: 'XPath (Absolute)',
                 strategy: 'xpath',
                 value: element.xpath,
-                code: `driver.findElement(By.xpath("${element.xpath}"))`,
+                code: `By.xpath("${element.xpath}")`,
                 priority: 2
             });
         }
@@ -212,7 +212,7 @@ class LocatorGenerator {
                 type: 'XPath (Text)',
                 strategy: 'xpath',
                 value: xpath,
-                code: `driver.findElement(By.xpath("${xpath}"))`,
+                code: `By.xpath("${xpath}")`,
                 priority: 6
             });
         }
@@ -224,7 +224,7 @@ class LocatorGenerator {
                 type: 'XPath (Resource ID)',
                 strategy: 'xpath',
                 value: xpath,
-                code: `driver.findElement(By.xpath("${xpath}"))`,
+                code: `By.xpath("${xpath}")`,
                 priority: 7
             });
         }
@@ -236,7 +236,7 @@ class LocatorGenerator {
                 type: 'XPath (Name)',
                 strategy: 'xpath',
                 value: xpath,
-                code: `driver.findElement(By.xpath("${xpath}"))`,
+                code: `By.xpath("${xpath}")`,
                 priority: 7
             });
         }

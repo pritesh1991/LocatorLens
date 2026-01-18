@@ -12,6 +12,7 @@ const appiumDot = document.getElementById('appium-dot');
 const settingsLink = document.getElementById('settings-link');
 const logsToggle = document.getElementById('logs-toggle');
 const logsContent = document.getElementById('logs-content');
+const openLogsBtn = document.getElementById('open-logs-btn');
 
 // State
 let devices = [];
@@ -41,6 +42,14 @@ function setupEventListeners() {
     }
 
     logsToggle.addEventListener('click', toggleLogs);
+
+    // Open logs in new tab
+    if (openLogsBtn) {
+        openLogsBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent toggle from firing
+            openLogsInNewTab();
+        });
+    }
 
     // Listen for log messages from background
     chrome.runtime.onMessage.addListener((message) => {
@@ -279,6 +288,11 @@ function resetConnectButton() {
     </svg>
     Connect to Device
   `;
+}
+
+function openLogsInNewTab() {
+    // Request background script to open/focus logs tab
+    chrome.runtime.sendMessage({ type: 'open-logs-tab' });
 }
 
 // Add spinning animation

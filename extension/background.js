@@ -3,6 +3,9 @@ console.log('Locator Builder background service initialized');
 
 let nativePort = null;
 let serverStatus = { backend: false, appium: false };
+let logsTabId = null; // Track the logs tab
+let logHistory = []; // Store recent logs for initial load
+const MAX_LOG_HISTORY = 1000;
 
 // Connect to Native Host
 function connectToNativeHost() {
@@ -18,11 +21,29 @@ function connectToNativeHost() {
             // Handle start result
             checkStatus();
         } else if (msg.type === 'log') {
-            chrome.runtime.sendMessage({
+            const logMessage = {
                 type: 'server-log',
                 message: msg.message,
-                level: msg.level
-            }).catch(() => { });
+                level: msg.level || 'info',
+                timestamp: Date.now()
+            };
+
+            // Store in history
+            logHistory.push(logMessage);
+            if (logHistory.length > MAX_LOG_HISTORY) {
+                logHistory.shift();
+            }
+
+            // Broadcast to popup
+            chrome.runtime.sendMessage(logMessage).catch(() => { });
+
+            // Send to logs tab if open
+            if (logsTabId) {
+                chrome.tabs.sendMessage(logsTabId, logMessage).catch(() => {
+                    // Tab might be closed
+                    logsTabId = null;
+                });
+            }
         }
     });
 
@@ -75,6 +96,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // Handle device connection in background (persistent)
         handleDeviceConnection(request.deviceInfo);
         sendResponse({ started: true });
+    } else if (request.type === 'open-logs-tab') {
+        // Open or focus logs tab
+        handleOpenLogsTab();
+        sendResponse({ success: true });
+    } else if (request.type === 'request-logs') {
+        // Send initial logs to newly opened logs tab
+        sendResponse({ success: true });
+        // Send logs to the requesting tab
+        if (sender.tab && sender.tab.id) {
+            chrome.tabs.sendMessage(sender.tab.id, {
+                type: 'initial-logs',
+                logs: logHistory
+            }).catch(() => { });
+        }
     }
     return true; // Keep channel open for async response
 });
@@ -118,6 +153,38 @@ async function handleDeviceConnection(deviceInfo) {
         console.error('Background: connection error', error.message);
     }
 }
+
+// Handle opening logs tab - create new or focus existing
+async function handleOpenLogsTab() {
+    console.log('Background: opening logs tab');
+
+    // Check if logs tab is already open
+    if (logsTabId) {
+        try {
+            await chrome.tabs.get(logsTabId);
+            // Tab exists, focus it
+            chrome.tabs.update(logsTabId, { active: true });
+            chrome.windows.update((await chrome.tabs.get(logsTabId)).windowId, { focused: true });
+            return;
+        } catch (error) {
+            // Tab no longer exists
+            logsTabId = null;
+        }
+    }
+
+    // Create new logs tab
+    const logsUrl = chrome.runtime.getURL('logs.html');
+    const tab = await chrome.tabs.create({ url: logsUrl });
+    logsTabId = tab.id;
+}
+
+// Listen for tab closure to clear logsTabId
+chrome.tabs.onRemoved.addListener((tabId) => {
+    if (tabId === logsTabId) {
+        logsTabId = null;
+        console.log('Background: logs tab closed');
+    }
+});
 
 // Connect on startup
 connectToNativeHost();
