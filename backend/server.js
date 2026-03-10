@@ -168,6 +168,17 @@ wss.on('connection', (ws, req) => {
         if (client) client.isAlive = true;
     });
 
+    // Safe send helper
+    function safeSend(data) {
+        if (ws.readyState === WebSocket.OPEN) {
+            try {
+                ws.send(JSON.stringify(data));
+            } catch (e) {
+                console.error(`Failed to send to client ${clientId}:`, e.message);
+            }
+        }
+    }
+
     // Handle messages from client
     ws.on('message', async (message) => {
         try {
@@ -179,8 +190,12 @@ wss.on('connection', (ws, req) => {
                     break;
 
                 case 'stop-streaming':
-                    screenMirror.stopStreaming();
-                    ws.send(JSON.stringify({ type: 'streaming-stopped' }));
+                    if (ws.deviceId) {
+                        screenMirror.stopStreamingForDevice(ws.deviceId);
+                    } else {
+                        screenMirror.stopStreaming();
+                    }
+                    safeSend({ type: 'streaming-stopped' });
                     break;
 
                 case 'get-page-source':
@@ -192,11 +207,15 @@ wss.on('connection', (ws, req) => {
                     break;
 
                 default:
-                    ws.send(JSON.stringify({ type: 'error', message: 'Unknown message type' }));
+                    safeSend({ type: 'error', message: 'Unknown message type' });
             }
         } catch (error) {
-            ws.send(JSON.stringify({ type: 'error', message: error.message }));
+            safeSend({ type: 'error', message: error.message });
         }
+    });
+
+    ws.on('error', (error) => {
+        console.error(`WebSocket error for client ${clientId}:`, error.message);
     });
 
     // Handle disconnection
@@ -306,17 +325,20 @@ async function handleFindElement(ws, data) {
 
 // Heartbeat interval to keep connections alive
 const heartbeatInterval = setInterval(() => {
-    wss.clients.forEach((ws) => {
-        clients.forEach((client, clientId) => {
-            if (!client.isAlive) {
-                client.ws.terminate();
-                clients.delete(clientId);
-                return;
-            }
+    clients.forEach((client, clientId) => {
+        if (!client.isAlive) {
+            client.ws.terminate();
+            clients.delete(clientId);
+            return;
+        }
 
-            client.isAlive = false;
+        client.isAlive = false;
+        try {
             client.ws.ping();
-        });
+        } catch (e) {
+            console.error(`Ping failed for client ${clientId}:`, e.message);
+            clients.delete(clientId);
+        }
     });
 }, WS_HEARTBEAT_INTERVAL);
 
@@ -341,12 +363,33 @@ server.listen(SERVER_PORT, () => {
 });
 
 // Graceful shutdown
-process.on('SIGTERM', async () => {
-    console.log('SIGTERM received, closing server...');
-    await appiumClient.closeSession();
+async function gracefulShutdown(signal) {
+    console.log(`${signal} received, closing server...`);
+    try {
+        await appiumClient.closeAllSessions();
+    } catch (e) {
+        console.error('Error closing sessions:', e.message);
+    }
     screenMirror.stopStreaming();
     server.close(() => {
         console.log('Server closed');
         process.exit(0);
     });
+    // Force exit if graceful shutdown takes too long
+    setTimeout(() => {
+        console.error('Forced shutdown after timeout');
+        process.exit(1);
+    }, 10000);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Prevent crashes from unhandled errors
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught exception:', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+    console.error('Unhandled rejection:', reason);
 });

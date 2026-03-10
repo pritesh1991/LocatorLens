@@ -1,6 +1,11 @@
 const BACKEND_URL = 'http://localhost:8765';
 const WS_URL = 'ws://localhost:8765';
 
+// Reconnection config
+const WS_RECONNECT_BASE_DELAY = 1000; // Start at 1 second
+const WS_RECONNECT_MAX_DELAY = 30000; // Max 30 seconds
+const WS_RECONNECT_MAX_ATTEMPTS = 50;
+
 // State
 let ws = null;
 let sessionInfo = null;
@@ -15,6 +20,9 @@ let lastFpsUpdate = Date.now();
 let coordinateScale = 1.0; // Scale factor between Screenshot Pixels and XML Points (e.g. 3.0 for iPhone Pro)
 let elementToNodeMap = new WeakMap(); // Map XML elements to DOM tree nodes
 let nodeIdCounter = 0; // Counter for generating unique node IDs
+let wsReconnectAttempts = 0;
+let wsReconnectTimer = null;
+let wsIntentionalClose = false; // Track if we closed on purpose
 
 // DOM Elements
 const deviceNameEl = document.getElementById('device-name');
@@ -85,11 +93,12 @@ function setupEventListeners() {
     modeToggleBtn.addEventListener('click', toggleMode);
     themeToggleBtn.addEventListener('click', toggleTheme);
     refreshBtn.addEventListener('click', () => {
-        // Add spinning animation to button
+        if (isLoadingPageSource) {
+            showNotification('Already refreshing...', 'info');
+            return;
+        }
         refreshBtn.classList.add('spinning');
         refreshPageSource();
-        // Fallback: stop spinning after 5s if no response
-        setTimeout(() => refreshBtn.classList.remove('spinning'), 5000);
     });
     disconnectBtn.addEventListener('click', disconnect);
     searchInput.addEventListener('input', handleSearch);
@@ -133,17 +142,36 @@ function setupEventListeners() {
 }
 
 function connectWebSocket() {
-    ws = new WebSocket(WS_URL);
+    // Clear any pending reconnect
+    if (wsReconnectTimer) {
+        clearTimeout(wsReconnectTimer);
+        wsReconnectTimer = null;
+    }
+
+    try {
+        ws = new WebSocket(WS_URL);
+    } catch (e) {
+        console.error('WebSocket creation failed:', e);
+        scheduleReconnect();
+        return;
+    }
 
     ws.onopen = () => {
         console.log('WebSocket connected');
+        wsReconnectAttempts = 0;
+        wsIntentionalClose = false;
         updateConnectionStatus(true);
+        showNotification('Connected to backend', 'success');
         startStreaming();
     };
 
     ws.onmessage = (event) => {
-        const message = JSON.parse(event.data);
-        handleWebSocketMessage(message);
+        try {
+            const message = JSON.parse(event.data);
+            handleWebSocketMessage(message);
+        } catch (e) {
+            console.error('Failed to parse WebSocket message:', e);
+        }
     };
 
     ws.onerror = (error) => {
@@ -151,10 +179,35 @@ function connectWebSocket() {
         updateConnectionStatus(false);
     };
 
-    ws.onclose = () => {
-        console.log('WebSocket disconnected');
+    ws.onclose = (event) => {
+        console.log('WebSocket disconnected, code:', event.code);
         updateConnectionStatus(false);
+
+        if (!wsIntentionalClose) {
+            scheduleReconnect();
+        }
     };
+}
+
+function scheduleReconnect() {
+    if (wsReconnectAttempts >= WS_RECONNECT_MAX_ATTEMPTS) {
+        showNotification('Connection lost. Please refresh the page.', 'error');
+        return;
+    }
+
+    // Exponential backoff with jitter
+    const delay = Math.min(
+        WS_RECONNECT_BASE_DELAY * Math.pow(2, wsReconnectAttempts) + Math.random() * 1000,
+        WS_RECONNECT_MAX_DELAY
+    );
+    wsReconnectAttempts++;
+
+    console.log(`Reconnecting in ${Math.round(delay / 1000)}s (attempt ${wsReconnectAttempts}/${WS_RECONNECT_MAX_ATTEMPTS})`);
+    showNotification(`Reconnecting... (attempt ${wsReconnectAttempts})`, 'warning');
+
+    wsReconnectTimer = setTimeout(() => {
+        connectWebSocket();
+    }, delay);
 }
 
 function handleWebSocketMessage(message) {
@@ -179,11 +232,20 @@ function handleWebSocketMessage(message) {
 
         case 'streaming-started':
             console.log(`Streaming started at ${message.fps} FPS`);
+            // Safe to request page source now — ws.deviceId is set on the server
+            refreshPageSource();
             break;
 
         case 'error':
             console.error('Backend error:', message.message);
             showNotification('Error: ' + message.message, 'error');
+            // Reset any in-progress loading state
+            if (isLoadingPageSource) {
+                isLoadingPageSource = false;
+                if (pageSourceTimeout) clearTimeout(pageSourceTimeout);
+                sourceLoading.classList.add('hidden');
+                refreshBtn.classList.remove('spinning');
+            }
             break;
     }
 }
@@ -197,9 +259,8 @@ function startStreaming() {
         deviceId: sessionInfo.device.id,
         fps: 3
     }));
-
-    // Also get initial page source
-    refreshPageSource();
+    // Page source is requested when 'streaming-started' is received,
+    // ensuring ws.deviceId is set on the server before we ask for it.
 }
 
 function updateScreenshot(base64Data) {
@@ -224,20 +285,16 @@ function updateScreenshot(base64Data) {
 // Offscreen canvas for comparing against last page source refresh
 let pageSourceSnapshot = null;
 let pageSourceSnapshotContext = null;
+// Reusable canvas for current-frame comparison (avoids creating one per frame)
+let diffCanvas = null;
+let diffCtx = null;
+// Debounce: only trigger auto-refresh at most once every 2 seconds
+let screenChangeDebounceTimer = null;
 
 function detectScreenChange() {
-    if (!screenImage.classList.contains('loaded')) {
-        console.log('⏩ Screen change detection skipped: image not loaded');
-        return;
-    }
-    if (!pageSourceSnapshot) {
-        console.log('⏩ Screen change detection skipped: no snapshot yet (will capture on first page source)');
-        return; // No snapshot yet = nothing to compare
-    }
-    if (!screenImage.complete) {
-        console.log('⏩ Screen change detection skipped: image not complete');
-        return; // Wait for image to fully load
-    }
+    if (!screenImage.classList.contains('loaded')) return;
+    if (!pageSourceSnapshot) return; // No snapshot yet = nothing to compare
+    if (!screenImage.complete) return;
 
     try {
         const width = screenImage.naturalWidth;
@@ -245,46 +302,57 @@ function detectScreenChange() {
 
         if (!width || !height) return;
 
-        // If dimensions changed, re-capture snapshot and force refresh
+        // If dimensions changed, force refresh immediately
         if (pageSourceSnapshot.width !== width || pageSourceSnapshot.height !== height) {
             console.log('Screen dimensions changed, forcing page source refresh...');
-            refreshPageSource(true);
+            if (isLoadingPageSource) {
+                showStaleIndicator();
+            } else {
+                refreshPageSource(true);
+            }
             return;
         }
 
-        // Compare current frame with snapshot from last page source refresh
-        const currentCanvas = document.createElement('canvas');
-        currentCanvas.width = width;
-        currentCanvas.height = height;
-        const currentCtx = currentCanvas.getContext('2d', { willReadFrequently: true });
-        currentCtx.drawImage(screenImage, 0, 0);
+        // Reuse the comparison canvas across frames
+        if (!diffCanvas || diffCanvas.width !== width || diffCanvas.height !== height) {
+            diffCanvas = document.createElement('canvas');
+            diffCanvas.width = width;
+            diffCanvas.height = height;
+            diffCtx = diffCanvas.getContext('2d', { willReadFrequently: true });
+        }
+        diffCtx.drawImage(screenImage, 0, 0);
 
-        const currentData = currentCtx.getImageData(0, 0, width, height).data;
+        const currentData = diffCtx.getImageData(0, 0, width, height).data;
         const snapshotData = pageSourceSnapshotContext.getImageData(0, 0, width, height).data;
 
         let diffPixels = 0;
-        const sampledPixels = Math.floor(width * height / 10); // We sample every 10th pixel
-        const threshold = 30; // Pixel color difference threshold
+        const sampledPixels = Math.floor(width * height / 10); // sample every 10th pixel
+        const threshold = 30;
 
-        // Check every 10th pixel for performance
         for (let i = 0; i < currentData.length; i += 40) {
             const rDiff = Math.abs(currentData[i] - snapshotData[i]);
             const gDiff = Math.abs(currentData[i + 1] - snapshotData[i + 1]);
             const bDiff = Math.abs(currentData[i + 2] - snapshotData[i + 2]);
-
-            if (rDiff + gDiff + bDiff > threshold) {
-                diffPixels++;
-            }
+            if (rDiff + gDiff + bDiff > threshold) diffPixels++;
         }
 
-        // Auto-refresh if >1% pixel change detected
         const changePercent = (diffPixels / sampledPixels * 100);
 
         if (diffPixels > sampledPixels * 0.01) {
-            console.log(`🔄 Screen change detected (${changePercent.toFixed(1)}% pixels changed), refreshing page source...`);
-            refreshPageSource(true);
-        } else {
-            // Uncomment for debugging: console.log(`✅ No change (${changePercent.toFixed(2)}%)`);
+            // Screen changed — always show stale indicator immediately
+            showStaleIndicator();
+
+            // Debounce the actual refresh to avoid hammering the backend
+            // while a screen is animating/transitioning
+            if (!screenChangeDebounceTimer) {
+                screenChangeDebounceTimer = setTimeout(() => {
+                    screenChangeDebounceTimer = null;
+                    if (!isLoadingPageSource) {
+                        console.log(`🔄 Screen change detected (${changePercent.toFixed(1)}% pixels changed), refreshing page source...`);
+                        refreshPageSource(true);
+                    }
+                }, 2000);
+            }
         }
 
     } catch (e) {
@@ -480,7 +548,7 @@ function findElementAtCoordinates(x, y, isClick = false) {
             // Android format: [x1,y1][x2,y2]
             const match = bounds.match(/\[(\d+),(\d+)\]\[(\d+),(\d+)\]/);
             if (match) {
-                [_, x1, y1, x2, y2] = match.map(Number);
+                [, x1, y1, x2, y2] = match.map(Number);
             }
         } else if (element.getAttribute('x') && element.getAttribute('width')) {
             // iOS format: x, y, width, height
@@ -581,7 +649,7 @@ function drawElementHighlight(xmlElement, isClick = false) {
         // Android - bounds are already in pixels, no scaling needed
         const match = bounds.match(/\[(\d+),(\d+)\]\[(\d+),(\d+)\]/);
         if (match) {
-            [_, x1, y1, x2, y2] = match.map(Number);
+            [, x1, y1, x2, y2] = match.map(Number);
             needsScaling = false;
         }
     } else if (xmlElement.getAttribute('x')) {
@@ -690,6 +758,8 @@ function highlightElementInTree(xmlElement) {
 }
 
 
+let pageSourceTimeout = null;
+
 async function refreshPageSource(silent = false) {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
@@ -704,6 +774,17 @@ async function refreshPageSource(silent = false) {
         sourceLoading.classList.remove('hidden');
     }
 
+    // Safety timeout - reset loading flag if response never arrives
+    if (pageSourceTimeout) clearTimeout(pageSourceTimeout);
+    pageSourceTimeout = setTimeout(() => {
+        if (isLoadingPageSource) {
+            console.warn('Page source request timed out, resetting...');
+            isLoadingPageSource = false;
+            sourceLoading.classList.add('hidden');
+            refreshBtn.classList.remove('spinning');
+        }
+    }, 15000);
+
     ws.send(JSON.stringify({
         type: 'get-page-source'
     }));
@@ -712,6 +793,11 @@ async function refreshPageSource(silent = false) {
 function updatePageSource(xmlString) {
     currentPageSource = xmlString;
     isLoadingPageSource = false; // Reset loading flag
+    if (pageSourceTimeout) clearTimeout(pageSourceTimeout); // Clear safety timeout
+    if (screenChangeDebounceTimer) { // Cancel any pending auto-refresh
+        clearTimeout(screenChangeDebounceTimer);
+        screenChangeDebounceTimer = null;
+    }
     sourceLoading.classList.add('hidden'); // Always hide on complete
     refreshBtn.classList.remove('spinning'); // Stop button animation
     hideStaleIndicator(); // Clear stale indicator since we just refreshed
@@ -1372,6 +1458,13 @@ async function disconnect() {
     try {
         const deviceId = sessionInfo?.device?.id;
 
+        // Mark as intentional so we don't auto-reconnect
+        wsIntentionalClose = true;
+        if (wsReconnectTimer) {
+            clearTimeout(wsReconnectTimer);
+            wsReconnectTimer = null;
+        }
+
         // Stop streaming
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'stop-streaming' }));
@@ -1395,7 +1488,31 @@ async function disconnect() {
     }
 }
 
+let notificationTimeout = null;
+
 function showNotification(message, type = 'info') {
-    // Simple notification - you can enhance this
     console.log(`[${type.toUpperCase()}] ${message}`);
+
+    // Create or reuse notification element
+    let toast = document.getElementById('notification-toast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'notification-toast';
+        document.body.appendChild(toast);
+    }
+
+    // Clear previous timeout
+    if (notificationTimeout) {
+        clearTimeout(notificationTimeout);
+    }
+
+    // Set content and style
+    toast.textContent = message;
+    toast.className = `notification-toast notification-${type} notification-visible`;
+
+    // Auto-hide after delay (longer for errors)
+    const delay = type === 'error' ? 6000 : type === 'warning' ? 4000 : 2500;
+    notificationTimeout = setTimeout(() => {
+        toast.classList.remove('notification-visible');
+    }, delay);
 }

@@ -1,13 +1,25 @@
 const { execSync, exec } = require('child_process');
 
+const EXEC_TIMEOUT = 15000; // 15 second timeout for shell commands
+
 class DeviceManager {
+    /**
+     * Validate device ID to prevent command injection
+     * @param {string} deviceId
+     * @returns {boolean}
+     */
+    isValidDeviceId(deviceId) {
+        // Device IDs should only contain alphanumeric, dots, colons, dashes, underscores
+        return /^[a-zA-Z0-9._:\-]+$/.test(deviceId);
+    }
+
     /**
      * List all running Android devices/emulators
      * @returns {Promise<Array>} Array of device objects
      */
     async listAndroidDevices() {
         try {
-            const output = execSync('adb devices -l', { encoding: 'utf-8' });
+            const output = execSync('adb devices -l', { encoding: 'utf-8', timeout: EXEC_TIMEOUT });
             const lines = output.split('\n').slice(1); // Skip header
 
             const devices = [];
@@ -16,6 +28,10 @@ class DeviceManager {
                     const parts = line.trim().split(/\s+/);
                     if (parts.length >= 2 && parts[1] === 'device') {
                         const deviceId = parts[0];
+                        if (!this.isValidDeviceId(deviceId)) {
+                            console.warn(`Skipping device with invalid ID: ${deviceId}`);
+                            continue;
+                        }
                         const deviceInfo = await this.getAndroidDeviceInfo(deviceId);
                         devices.push({
                             id: deviceId,
@@ -30,20 +46,27 @@ class DeviceManager {
 
             return devices;
         } catch (error) {
-            console.error('Error listing Android devices:', error.message);
+            if (error.killed) {
+                console.error('ADB command timed out');
+            } else {
+                console.error('Error listing Android devices:', error.message);
+            }
             return [];
         }
     }
 
     /**
      * Get detailed info about an Android device
-     * @param {string} deviceId 
+     * @param {string} deviceId
      * @returns {Promise<Object>}
      */
     async getAndroidDeviceInfo(deviceId) {
+        if (!this.isValidDeviceId(deviceId)) {
+            return { model: deviceId, version: 'Unknown' };
+        }
         try {
-            const model = execSync(`adb -s ${deviceId} shell getprop ro.product.model`, { encoding: 'utf-8' }).trim();
-            const version = execSync(`adb -s ${deviceId} shell getprop ro.build.version.release`, { encoding: 'utf-8' }).trim();
+            const model = execSync(`adb -s ${deviceId} shell getprop ro.product.model`, { encoding: 'utf-8', timeout: EXEC_TIMEOUT }).trim();
+            const version = execSync(`adb -s ${deviceId} shell getprop ro.build.version.release`, { encoding: 'utf-8', timeout: EXEC_TIMEOUT }).trim();
 
             return { model, version };
         } catch (error) {
@@ -57,7 +80,7 @@ class DeviceManager {
      */
     async listIOSSimulators() {
         try {
-            const output = execSync('xcrun simctl list devices booted --json', { encoding: 'utf-8' });
+            const output = execSync('xcrun simctl list devices booted --json', { encoding: 'utf-8', timeout: EXEC_TIMEOUT });
             const data = JSON.parse(output);
 
             const simulators = [];
@@ -78,7 +101,11 @@ class DeviceManager {
 
             return simulators;
         } catch (error) {
-            console.error('Error listing iOS simulators:', error.message);
+            if (error.killed) {
+                console.error('xcrun command timed out');
+            } else {
+                console.error('Error listing iOS simulators:', error.message);
+            }
             return [];
         }
     }
@@ -110,7 +137,7 @@ class DeviceManager {
      */
     isAdbAvailable() {
         try {
-            execSync('adb version', { encoding: 'utf-8' });
+            execSync('adb version', { encoding: 'utf-8', timeout: 5000 });
             return true;
         } catch (error) {
             return false;
@@ -122,7 +149,7 @@ class DeviceManager {
      */
     isIOSToolsAvailable() {
         try {
-            execSync('xcrun simctl help', { encoding: 'utf-8' });
+            execSync('xcrun simctl help', { encoding: 'utf-8', timeout: 5000 });
             return true;
         } catch (error) {
             return false;

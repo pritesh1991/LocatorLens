@@ -120,6 +120,29 @@ function sendMessage(msg) {
     }
 }
 
+// Kill any process using a given port (cross-platform)
+function killPortProcess(port) {
+    const isWindows = process.platform === 'win32';
+    try {
+        if (isWindows) {
+            const result = execSync(`netstat -ano | findstr :${port} | findstr LISTENING`, { encoding: 'utf-8', timeout: 5000 });
+            const match = result.trim().match(/\s+(\d+)\s*$/m);
+            if (match) {
+                execSync(`taskkill /PID ${match[1]} /F`, { timeout: 5000 });
+                log(`Killed process ${match[1]} on port ${port}`, 'warning');
+            }
+        } else {
+            const pid = execSync(`lsof -ti:${port}`, { encoding: 'utf-8', timeout: 5000 }).trim();
+            if (pid) {
+                execSync(`kill -9 ${pid}`, { timeout: 5000 });
+                log(`Killed process ${pid} on port ${port}`, 'warning');
+            }
+        }
+    } catch (e) {
+        // Port not in use or kill failed - that's fine
+    }
+}
+
 // Start Backend Server
 function startBackend() {
     if (backendProcess) {
@@ -128,17 +151,7 @@ function startBackend() {
 
     try {
         // Check if something is already on port 8765
-        try {
-            const pid = execSync('lsof -ti:8765', { encoding: 'utf-8' }).trim();
-            if (pid) {
-                log(`Found existing process on port 8765 (PID: ${pid}), killing it...`, 'warning');
-                execSync(`kill -9 ${pid}`);
-                // Give it a moment to release the port
-                execSync('sleep 0.5');
-            }
-        } catch (e) {
-            // No process on port, that's fine
-        }
+        killPortProcess(8765);
 
         log('Starting Backend Server...');
         backendProcess = spawn(NODE_PATH, [BACKEND_SCRIPT], {
@@ -160,7 +173,14 @@ function startBackend() {
         });
 
         backendProcess.on('close', (code) => {
-            log(`Backend process exited with code ${code}`, 'warning');
+            const level = code === 0 ? 'info' : 'warning';
+            log(`Backend process exited with code ${code}`, level);
+            backendProcess = null;
+            sendMessage({ type: 'status', backend: false, appium: !!appiumProcess });
+        });
+
+        backendProcess.on('error', (err) => {
+            log(`Backend process error: ${err.message}`, 'error');
             backendProcess = null;
             sendMessage({ type: 'status', backend: false, appium: !!appiumProcess });
         });
@@ -175,9 +195,10 @@ function startBackend() {
 
 // Find Appium Path
 function findAppiumPath() {
-    // 1. Try which command
+    // 1. Try which/where command
     try {
-        const result = execSync('which appium', { encoding: 'utf-8' }).trim();
+        const cmd = process.platform === 'win32' ? 'where appium' : 'which appium';
+        const result = execSync(cmd, { encoding: 'utf-8', timeout: 5000 }).trim().split('\n')[0].trim();
         if (result && fs.existsSync(result)) return result;
     } catch (e) { }
 
@@ -191,6 +212,18 @@ function findAppiumPath() {
 
     for (const p of commonPaths) {
         if (fs.existsSync(p)) return p;
+    }
+
+    // Windows paths
+    if (process.platform === 'win32') {
+        const winPaths = [
+            path.join(process.env.APPDATA || '', 'npm', 'appium.cmd'),
+            path.join(process.env.APPDATA || '', 'npm', 'appium'),
+            'C:\\Program Files\\nodejs\\appium.cmd'
+        ];
+        for (const p of winPaths) {
+            if (fs.existsSync(p)) return p;
+        }
     }
 
     return null;
@@ -211,17 +244,7 @@ function startAppium() {
 
     try {
         // Check if something is already on port 4723
-        try {
-            const pid = execSync('lsof -ti:4723', { encoding: 'utf-8' }).trim();
-            if (pid) {
-                log(`Found existing process on port 4723 (PID: ${pid}), killing it...`, 'warning');
-                execSync(`kill -9 ${pid}`);
-                // Give it a moment to release the port
-                execSync('sleep 0.5');
-            }
-        } catch (e) {
-            // No process on port, that's fine
-        }
+        killPortProcess(4723);
 
         log(`Starting Appium Server from: ${appiumPath}`);
         appiumProcess = spawn(appiumPath, [], {
@@ -245,7 +268,14 @@ function startAppium() {
         });
 
         appiumProcess.on('close', (code) => {
-            log(`Appium process exited with code ${code}`, 'warning');
+            const level = code === 0 ? 'info' : 'warning';
+            log(`Appium process exited with code ${code}`, level);
+            appiumProcess = null;
+            sendMessage({ type: 'status', backend: !!backendProcess, appium: false });
+        });
+
+        appiumProcess.on('error', (err) => {
+            log(`Appium process error: ${err.message}`, 'error');
             appiumProcess = null;
             sendMessage({ type: 'status', backend: !!backendProcess, appium: false });
         });
@@ -265,13 +295,21 @@ function stopServers() {
     let appiumStopped = false;
 
     if (backendProcess) {
-        process.kill(backendProcess.pid);
+        try {
+            process.kill(backendProcess.pid, 'SIGTERM');
+        } catch (e) {
+            log(`Backend process already dead: ${e.message}`, 'warning');
+        }
         backendProcess = null;
         backendStopped = true;
     }
 
     if (appiumProcess) {
-        process.kill(appiumProcess.pid);
+        try {
+            process.kill(appiumProcess.pid, 'SIGTERM');
+        } catch (e) {
+            log(`Appium process already dead: ${e.message}`, 'warning');
+        }
         appiumProcess = null;
         appiumStopped = true;
     }
@@ -327,7 +365,11 @@ process.stdin.on('readable', () => {
                             let appiumRunning = !!appiumProcess;
                             if (!appiumRunning) {
                                 try {
-                                    execSync('pgrep -x appium');
+                                    if (process.platform === 'win32') {
+                                        execSync('tasklist /FI "IMAGENAME eq appium*"', { encoding: 'utf-8', timeout: 5000 });
+                                    } else {
+                                        execSync('pgrep -x appium', { timeout: 5000 });
+                                    }
                                     appiumRunning = true;
                                 } catch (e) { }
                             }
@@ -360,6 +402,15 @@ process.on('SIGINT', () => process.exit(0));
 // Handle stdout errors (EPIPE when Chrome disconnects)
 process.stdout.on('error', () => {
     process.exit(0);
+});
+
+// Prevent crashes from unhandled errors
+process.on('uncaughtException', (err) => {
+    log(`Uncaught exception: ${err.message}`, 'error');
+});
+
+process.on('unhandledRejection', (reason) => {
+    log(`Unhandled rejection: ${reason}`, 'error');
 });
 
 log('Native host launcher started');

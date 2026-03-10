@@ -2,10 +2,34 @@ const { spawn, exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
+const CAPTURE_TIMEOUT = 10000; // 10 second timeout per screenshot
+const MAX_CONSECUTIVE_ERRORS = 10; // Stop streaming after this many consecutive failures
+
 class ScreenMirror {
     constructor() {
-        // Map of deviceId -> { interval, isCapturing, platform }
+        // Map of deviceId -> { interval, isCapturing, platform, errorCount }
         this.streams = new Map();
+        this.cleanupOrphanedTempFiles();
+    }
+
+    /**
+     * Clean up any orphaned temp screenshot files from previous runs
+     */
+    cleanupOrphanedTempFiles() {
+        try {
+            const files = fs.readdirSync(__dirname);
+            const tempFiles = files.filter(f => f.startsWith('temp_') && f.endsWith('.png'));
+            for (const file of tempFiles) {
+                try {
+                    fs.unlinkSync(path.join(__dirname, file));
+                    console.log(`Cleaned up orphaned temp file: ${file}`);
+                } catch (e) {
+                    // Ignore cleanup errors
+                }
+            }
+        } catch (e) {
+            // Ignore if directory read fails
+        }
     }
 
     /**
@@ -15,8 +39,16 @@ class ScreenMirror {
      */
     async captureAndroidScreen(deviceId) {
         return new Promise((resolve, reject) => {
-            // Use exec-out to stream directly to stdout, avoiding file I/O on device and local
             const adb = spawn('adb', ['-s', deviceId, 'exec-out', 'screencap', '-p']);
+            let settled = false;
+
+            const timeout = setTimeout(() => {
+                if (!settled) {
+                    settled = true;
+                    adb.kill('SIGKILL');
+                    reject(new Error('ADB screenshot timed out'));
+                }
+            }, CAPTURE_TIMEOUT);
 
             const chunks = [];
 
@@ -29,7 +61,10 @@ class ScreenMirror {
             });
 
             adb.on('close', (code) => {
-                if (code === 0) {
+                clearTimeout(timeout);
+                if (settled) return;
+                settled = true;
+                if (code === 0 && chunks.length > 0) {
                     resolve(Buffer.concat(chunks));
                 } else {
                     reject(new Error(`ADB process exited with code ${code}`));
@@ -37,6 +72,9 @@ class ScreenMirror {
             });
 
             adb.on('error', (err) => {
+                clearTimeout(timeout);
+                if (settled) return;
+                settled = true;
                 reject(err);
             });
         });
@@ -52,10 +90,10 @@ class ScreenMirror {
             const timestamp = Date.now();
             const localPath = path.join(__dirname, `temp_${udid}_${timestamp}.png`);
 
-            // iOS simctl doesn't support stdout streaming easily, so we still use file
-            // but we use exec (async) instead of execSync
-            exec(`xcrun simctl io ${udid} screenshot ${localPath}`, (error, stdout, stderr) => {
+            const child = exec(`xcrun simctl io ${udid} screenshot ${localPath}`, { timeout: CAPTURE_TIMEOUT }, (error, stdout, stderr) => {
                 if (error) {
+                    // Clean up temp file on error
+                    fs.unlink(localPath, () => {});
                     reject(error);
                     return;
                 }
@@ -67,6 +105,7 @@ class ScreenMirror {
                     });
                     resolve(imageBuffer);
                 } catch (err) {
+                    fs.unlink(localPath, () => {});
                     reject(err);
                 }
             });
@@ -111,7 +150,8 @@ class ScreenMirror {
         const state = {
             isCapturing: false,
             platform,
-            interval: null
+            interval: null,
+            errorCount: 0
         };
 
         const interval = 1000 / fps;
@@ -125,10 +165,19 @@ class ScreenMirror {
                 // Check if stream is still active
                 if (this.streams.has(deviceId)) {
                     callback({ type: 'screenshot', data: screenshot });
+                    state.errorCount = 0; // Reset on success
                 }
             } catch (error) {
-                console.error(`Streaming error for ${deviceId}:`, error.message);
-                // Don't send error to frontend for every frame drop, just log it
+                state.errorCount++;
+                if (state.errorCount <= 3 || state.errorCount % 10 === 0) {
+                    console.error(`Streaming error for ${deviceId} (${state.errorCount}/${MAX_CONSECUTIVE_ERRORS}):`, error.message);
+                }
+                // Auto-stop after too many consecutive failures
+                if (state.errorCount >= MAX_CONSECUTIVE_ERRORS) {
+                    console.error(`Stopping stream for ${deviceId} after ${MAX_CONSECUTIVE_ERRORS} consecutive errors`);
+                    callback({ type: 'error', message: `Screen capture failed repeatedly. Device may be disconnected.` });
+                    this.stopStreamingForDevice(deviceId);
+                }
             } finally {
                 state.isCapturing = false;
             }

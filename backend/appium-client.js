@@ -1,6 +1,9 @@
 const { remote } = require('webdriverio');
 const { APPIUM_URL } = require('./config');
 
+const SESSION_CREATE_TIMEOUT = 120000; // 2 minutes for session creation (WDA build can be slow)
+const COMMAND_TIMEOUT = 30000; // 30 seconds for individual commands
+
 class AppiumClient {
     constructor() {
         // Map of deviceId -> { driver, sessionActive, deviceInfo }
@@ -9,10 +12,14 @@ class AppiumClient {
 
     /**
      * Create Appium session for the selected device
-     * @param {Object} deviceInfo 
+     * @param {Object} deviceInfo
      */
     async createSession(deviceInfo) {
         try {
+            if (!deviceInfo || !deviceInfo.id || !deviceInfo.platform) {
+                return { success: false, error: 'Invalid device info: id and platform are required' };
+            }
+
             // Close existing session for this device if any
             if (this.sessions.has(deviceInfo.id)) {
                 await this.closeSession(deviceInfo.id);
@@ -24,7 +31,9 @@ class AppiumClient {
                 hostname: 'localhost',
                 port: 4723,
                 path: '/',
-                capabilities
+                capabilities,
+                connectionRetryTimeout: SESSION_CREATE_TIMEOUT,
+                connectionRetryCount: 3
             });
 
             this.sessions.set(deviceInfo.id, {
@@ -115,7 +124,7 @@ class AppiumClient {
     }
 
     /**
-     * Get driver for a device
+     * Get driver for a device, with session validation
      * @param {string} deviceId
      * @returns {Object}
      */
@@ -123,6 +132,9 @@ class AppiumClient {
         const session = this.sessions.get(deviceId);
         if (!session || !session.driver) {
             throw new Error(`No active Appium session for device: ${deviceId}`);
+        }
+        if (!session.sessionActive) {
+            throw new Error(`Appium session for device ${deviceId} is no longer active`);
         }
         return session.driver;
     }
@@ -140,6 +152,7 @@ class AppiumClient {
             return source;
         } catch (error) {
             console.error(`Error getting page source for ${deviceId}:`, error.message);
+            this.handleSessionError(deviceId, error);
             throw error;
         }
     }
@@ -157,7 +170,29 @@ class AppiumClient {
             return screenshot;
         } catch (error) {
             console.error(`Error taking screenshot for ${deviceId}:`, error.message);
+            this.handleSessionError(deviceId, error);
             throw error;
+        }
+    }
+
+    /**
+     * Handle session errors - mark session as inactive if it's a session-level failure
+     * @param {string} deviceId
+     * @param {Error} error
+     */
+    handleSessionError(deviceId, error) {
+        const msg = error.message || '';
+        // Detect dead sessions
+        if (msg.includes('invalid session id') ||
+            msg.includes('session not created') ||
+            msg.includes('Session not found') ||
+            msg.includes('ECONNREFUSED') ||
+            msg.includes('ECONNRESET')) {
+            console.warn(`Session for ${deviceId} appears dead, marking inactive`);
+            const session = this.sessions.get(deviceId);
+            if (session) {
+                session.sessionActive = false;
+            }
         }
     }
 
@@ -190,6 +225,7 @@ class AppiumClient {
             console.log(`Tapped at (${x}, ${y}) on device ${deviceId}`);
         } catch (error) {
             console.error(`Error performing tap on ${deviceId}:`, error.message);
+            this.handleSessionError(deviceId, error);
             throw error;
         }
     }
