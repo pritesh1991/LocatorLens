@@ -79,6 +79,16 @@ function setupEventListeners() {
             addLogEntry(message.message, message.level);
         } else if (message.type === 'server-start-error') {
             handleServerStartError(message.errors);
+        } else if (message.type === 'device-connection-result') {
+            if (message.success) {
+                showError('');
+            } else {
+                showError(`Connection failed: ${message.error}`);
+                resetConnectButton();
+            }
+        } else if (message.type === 'server-status') {
+            serverStatus = message.status || { backend: false, appium: false };
+            renderServerStatus();
         }
     });
 }
@@ -179,10 +189,19 @@ async function handleServerToggle() {
     });
 }
 
+let healthCheckRetries = 0;
+const MAX_HEALTH_RETRIES = 5;
+
 async function checkBackendStatus() {
     try {
-        const response = await fetch(`${BACKEND_URL}/health`);
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+
+        const response = await fetch(`${BACKEND_URL}/health`, { signal: controller.signal });
+        clearTimeout(timeout);
         const data = await response.json();
+
+        healthCheckRetries = 0; // Reset on success
 
         if (data.status === 'ok') {
             showError('');
@@ -202,7 +221,13 @@ async function checkBackendStatus() {
             }
         }
     } catch (error) {
-        // Backend might be starting up
+        healthCheckRetries++;
+        if (healthCheckRetries <= MAX_HEALTH_RETRIES) {
+            // Backend might be starting up, retry silently
+            console.log(`Backend health check failed (attempt ${healthCheckRetries}/${MAX_HEALTH_RETRIES})`);
+        } else {
+            showError('Backend server is not responding. It may still be starting up.');
+        }
     }
 }
 

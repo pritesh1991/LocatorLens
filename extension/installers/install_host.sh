@@ -1,383 +1,208 @@
 #!/bin/bash
 
 # ====================================================================
-# LocatorLens Native Host Installation Script - macOS/Linux
-# Self-Contained Installer - Works from anywhere!
+# LocatorLens Native Host Installer - macOS / Linux
+#
+# Usage:
+#   bash install_host.sh                          # auto-detect
+#   bash install_host.sh --extension-id <id>      # specify CWS extension ID
 # ====================================================================
 
-set -e  # Exit on error
+set -e
 
-echo ""
-echo "========================================"
-echo "LocatorLens Native Host Installer"
-echo "========================================"
-echo ""
-
+EXTENSION_ID="ajcdeghbgfonhphbnkmbmocekkmdeoke"
 HOST_NAME="com.locatorbuilder.host"
+INSTALL_BASE="$HOME/.locatorlens"
+NATIVE_HOST_DIR="$INSTALL_BASE/native-host"
+BACKEND_INSTALL_DIR="$INSTALL_BASE/backend"
 
-# Detect OS and set directories
+# Parse arguments
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --extension-id) EXTENSION_ID="$2"; shift ;;
+    esac
+    shift
+done
+
+echo ""
+echo "========================================"
+echo " LocatorLens Native Host Installer"
+echo "========================================"
+echo ""
+
+# Detect OS
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    # macOS
-    CHROME_DIR="$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts"
-    EDGE_DIR="$HOME/Library/Application Support/Microsoft Edge/NativeMessagingHosts"
-    CHROME_EXT_DIR="$HOME/Library/Application Support/Google/Chrome/Default/Extensions"
+    CHROME_NMH_DIR="$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts"
+    CHROMIUM_NMH_DIR="$HOME/Library/Application Support/Chromium/NativeMessagingHosts"
+    EDGE_NMH_DIR="$HOME/Library/Application Support/Microsoft Edge/NativeMessagingHosts"
+    BRAVE_NMH_DIR="$HOME/Library/Application Support/BraveSoftware/Brave-Browser/NativeMessagingHosts"
     OS_NAME="macOS"
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    # Linux
-    CHROME_DIR="$HOME/.config/google-chrome/NativeMessagingHosts"
-    EDGE_DIR="$HOME/.config/microsoft-edge/NativeMessagingHosts"
-    CHROME_EXT_DIR="$HOME/.config/google-chrome/Default/Extensions"
+    CHROME_NMH_DIR="$HOME/.config/google-chrome/NativeMessagingHosts"
+    CHROMIUM_NMH_DIR="$HOME/.config/chromium/NativeMessagingHosts"
+    EDGE_NMH_DIR="$HOME/.config/microsoft-edge/NativeMessagingHosts"
+    BRAVE_NMH_DIR="$HOME/.config/BraveSoftware/Brave-Browser/NativeMessagingHosts"
     OS_NAME="Linux"
 else
-    echo "❌ ERROR: Unsupported OS: $OSTYPE"
-    echo "This script only supports macOS and Linux."
+    echo "ERROR: Unsupported OS: $OSTYPE (only macOS and Linux are supported by this script)"
+    echo "For Windows, please use install_host.bat"
     exit 1
 fi
 
-echo "Detected OS: $OS_NAME"
+echo "OS: $OS_NAME"
+echo "Extension ID: $EXTENSION_ID"
+echo "Install directory: $INSTALL_BASE"
 echo ""
 
-# Try to find the LocatorLens extension installation
-echo "[1/5] Looking for LocatorLens extension..."
-EXTENSION_ID="ajcdeghbgfonhphbnkmbmocekkmdeoke"
-INSTALL_DIR=""
+# --- Step 1: Check Node.js ---
+echo "[1/6] Checking Node.js..."
+if ! command -v node &>/dev/null; then
+    echo "  ERROR: Node.js not found. Please install Node.js v18+ from https://nodejs.org"
+    exit 1
+fi
+NODE_VERSION=$(node --version)
+echo "  OK Node.js $NODE_VERSION"
 
-if [ -d "$CHROME_EXT_DIR/$EXTENSION_ID" ]; then
-    # Find the latest version directory
-    LATEST_VERSION=$(ls -1 "$CHROME_EXT_DIR/$EXTENSION_ID" | sort -V | tail -1)
-    if [ -n "$LATEST_VERSION" ]; then
-        INSTALL_DIR="$CHROME_EXT_DIR/$EXTENSION_ID/$LATEST_VERSION"
-        echo "  ✓ Found extension at: $INSTALL_DIR"
+# --- Step 2: Check npm ---
+echo "[2/6] Checking npm..."
+if ! command -v npm &>/dev/null; then
+    echo "  ERROR: npm not found. Please install Node.js from https://nodejs.org"
+    exit 1
+fi
+echo "  OK npm found"
+
+# --- Step 3: Locate or download backend ---
+echo "[3/6] Setting up backend..."
+
+# Try to find if we're running from inside the repo
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_BACKEND="$SCRIPT_DIR/../../backend"
+
+if [ -f "$REPO_BACKEND/server.js" ] && [ -f "$REPO_BACKEND/package.json" ]; then
+    echo "  Found backend in repository at: $(realpath $REPO_BACKEND)"
+    BACKEND_SRC="$(realpath $REPO_BACKEND)"
+
+    mkdir -p "$BACKEND_INSTALL_DIR"
+    cp -R "$BACKEND_SRC/." "$BACKEND_INSTALL_DIR/"
+    echo "  OK Copied backend to $BACKEND_INSTALL_DIR"
+else
+    echo "  ! Backend not found in repository location."
+    echo "  Checking if backend is already installed..."
+
+    if [ -f "$BACKEND_INSTALL_DIR/server.js" ]; then
+        echo "  OK Backend already installed at $BACKEND_INSTALL_DIR"
+    else
+        echo ""
+        echo "  ERROR: Backend files not found."
+        echo "  Please download the full release package from GitHub:"
+        echo "  https://github.com/YOUR_USERNAME/locatorlens/releases/latest"
+        echo ""
+        echo "  Extract it and run this installer from inside the extracted folder."
+        exit 1
     fi
 fi
 
-# If not found, create in a standard location
-if [ -z "$INSTALL_DIR" ]; then
-    echo "  ⊗ Extension not found in Chrome extensions directory"
-    echo "  → Creating native host files in: $HOME/.locatorlens"
-    INSTALL_DIR="$HOME/.locatorlens"
-    mkdir -p "$INSTALL_DIR"
-fi
+# Install npm dependencies
+echo "  Installing backend dependencies..."
+cd "$BACKEND_INSTALL_DIR"
+npm install --omit=dev --silent
+cd - > /dev/null
+echo "  OK Backend dependencies installed"
 
-#Create native-host directory
-NATIVE_HOST_DIR="$INSTALL_DIR/native-host"
+# --- Step 4: Create native host files ---
+echo "[4/6] Creating native host files..."
 mkdir -p "$NATIVE_HOST_DIR"
 
-echo "[2/5] Creating native host wrapper script..."
-# Create host.sh with embedded logic
-cat > "$NATIVE_HOST_DIR/host.sh" << 'EOF'
+# Create host.sh wrapper
+cat > "$NATIVE_HOST_DIR/host.sh" << HOSTEOF
 #!/bin/bash
+# LocatorLens Native Messaging Host Wrapper
+# Ensures correct PATH is set when Chrome launches this
 
-# Ensure common paths are in PATH (Chrome environment can be restricted)
-export PATH="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:\$PATH"
 
-# Find node - use dynamic PATH lookup first (platform-agnostic)
-NODE_PATH=$(which node 2>/dev/null)
-
-# If 'which' doesn't find node, check common installation locations as fallback
-if [ -z "$NODE_PATH" ] || [ ! -f "$NODE_PATH" ]; then
-    # Check common locations
-    for path in "/opt/homebrew/bin/node" "/usr/local/bin/node" "/usr/bin/node" "$HOME/.nvm/versions/node/*/bin/node"; do
-        if [ -f "$path" ]; then
-            NODE_PATH="$path"
-            break
-        fi
+# Find node
+NODE="\$(command -v node 2>/dev/null)"
+if [ -z "\$NODE" ]; then
+    for p in "/opt/homebrew/bin/node" "/usr/local/bin/node" "$HOME/.nvm/versions/node/"*/bin/node; do
+        [ -f "\$p" ] && NODE="\$p" && break
     done
 fi
 
-# Final check
-if [ -z "$NODE_PATH" ] || [ ! -f "$NODE_PATH" ]; then
-    echo "ERROR: Node.js not found! Please install Node.js" >&2
+if [ -z "\$NODE" ]; then
+    echo "ERROR: Node.js not found" >&2
     exit 1
 fi
 
-# Run the launcher
-"$NODE_PATH" "$(dirname "$0")/launcher.js"
-EOF
-
+exec "\$NODE" "$(realpath $NATIVE_HOST_DIR)/launcher.js"
+HOSTEOF
 chmod +x "$NATIVE_HOST_DIR/host.sh"
 
-echo "[3/5] Creating launcher script..."
-# Create a minimal launcher.js that works standalone
-cat > "$NATIVE_HOST_DIR/launcher.js" << 'LAUNCHEREOF'
-#!/usr/bin/env node
+# Copy launcher.js from native-host directory if available
+REPO_LAUNCHER="$SCRIPT_DIR/../../native-host/launcher.js"
+if [ -f "$REPO_LAUNCHER" ]; then
+    cp "$(realpath $REPO_LAUNCHER)" "$NATIVE_HOST_DIR/launcher.js"
+    chmod +x "$NATIVE_HOST_DIR/launcher.js"
+    echo "  OK Native host files created"
+else
+    echo "  ERROR: launcher.js not found at $REPO_LAUNCHER"
+    exit 1
+fi
 
-const fs = require('fs');
-const path = require('path');
-const { spawn, execSync } = require('child_process');
+# --- Step 5: Create native messaging manifest ---
+echo "[5/6] Creating native messaging manifest..."
 
-// Find extension directory
-function findExtensionDir() {
-    const HOME = process.env.HOME || process.env.USERPROFILE;
-    const extId = 'ajcdeghbgfonhphbnkmbmocekkmdeoke';
-    
-    // Try common Chrome extension locations
-    const possibleDirs = [
-        path.join(HOME, 'Library/Application Support/Google/Chrome/Default/Extensions', extId),
-        path.join(HOME, '.config/google-chrome/Default/Extensions', extId),
-        path.join(process.env.LOCALAPPDATA || '', 'Google/Chrome/User Data/Default/Extensions', extId)
-    ];
-    
-    for (const dir of possibleDirs) {
-        if (fs.existsSync(dir)) {
-            // Find latest version
-            const versions = fs.readdirSync(dir).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
-            if (versions.length > 0) {
-                return path.join(dir, versions[0]);
-            }
-        }
-    }
-    return null;
-}
-
-const EXT_DIR = findExtensionDir();
-const BACKEND_SCRIPT = EXT_DIR ? path.join(EXT_DIR, 'backend', 'server.js') : null;
-const LOG_FILE = path.join(process.env.HOME || process.env.USERPROFILE, '.locatorlens.log');
-
-let backendProcess = null;
-let appiumProcess = null;
-
-// Logging
-function log(message, level = 'info') {
-    const timestamp = new Date().toISOString();
-    const logEntry = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
-    
-    try {
-        fs.appendFileSync(LOG_FILE, `${logEntry}\n`);
-    } catch (e) {}
-    
-    sendMessage({ type: 'log', message: logEntry, level });
-}
-
-// Send message to Chrome
-function sendMessage(msg) {
-    try {
-        if (!process.stdout.writable) return;
-        const buffer = Buffer.from(JSON.stringify(msg));
-        const header = Buffer.alloc(4);
-        header.writeUInt32LE(buffer.length, 0);
-        process.stdout.write(header);
-        process.stdout.write(buffer);
-    } catch (e) {}
-}
-
-// Start Backend
-function startBackend() {
-    if (backendProcess) {
-        return { success: true, message: 'Backend already running' };
-    }
-    
-    if (!BACKEND_SCRIPT || !fs.existsSync(BACKEND_SCRIPT)) {
-        const errorMsg = 'Backend server not found. Please ensure LocatorLens extension is properly installed.';
-        log(errorMsg, 'error');
-        return { success: false, error: errorMsg, code: 'BACKEND_NOT_FOUND' };
-    }
-    
-    try {
-        log('Starting Backend Server...');
-        backendProcess = spawn('node', [BACKEND_SCRIPT], { detached: false });
-        
-        backendProcess.stdout.on('data', (data) => log(`[Backend] ${data.toString().trim()}`, 'info'));
-        backendProcess.stderr.on('data', (data) => {
-            const msg = data.toString().trim();
-            log(`[Backend] ${msg}`, 'error');
-            if (msg.includes("Cannot find module") || msg.includes("MODULE_NOT_FOUND")) {
-                log("ACTION REQUIRED: Backend dependencies missing. Please run 'npm install' in the 'backend' directory.", 'error');
-            }
-        });
-        backendProcess.on('close', (code) => {
-            log(`Backend exited with code ${code}`, 'warning');
-            backendProcess = null;
-            sendMessage({ type: 'status', backend: false, appium: !!appiumProcess });
-        });
-        
-        log(`Backend started with PID ${backendProcess.pid}`);
-        return { success: true, pid: backendProcess.pid };
-    } catch (error) {
-        log(`Error starting backend: ${error.message}`, 'error');
-        return { success: false, error: error.message };
-    }
-}
-
-// Find Appium Path
-function findAppiumPath() {
-    // 1. Try which command
-    try {
-        const result = execSync('which appium', { encoding: 'utf-8' }).trim();
-        if (result && fs.existsSync(result)) return result;
-    } catch (e) {}
-
-    // 2. Check common locations
-    const commonPaths = [
-        '/usr/local/bin/appium',
-        '/opt/homebrew/bin/appium',
-        path.join(process.env.HOME || '', '.npm-global/bin/appium'),
-        path.join(process.env.HOME || '', 'npm/bin/appium')
-    ];
-
-    for (const p of commonPaths) {
-        if (fs.existsSync(p)) return p;
-    }
-    
-    return null;
-}
-
-// Start Appium
-function startAppium() {
-    if (appiumProcess) {
-        return { success: true, message: 'Appium already running' };
-    }
-    
-    const appiumPath = findAppiumPath();
-    if (!appiumPath) {
-        const errorMsg = 'Appium is not installed. Please install it using: npm install -g appium';
-        log(errorMsg, 'error');
-        return { success: false, error: errorMsg, code: 'APPIUM_NOT_FOUND' };
-    }
-    
-    try {
-        log(`Starting Appium Server from: ${appiumPath}`);
-        appiumProcess = spawn(appiumPath, [], { detached: false, shell: true });
-        
-        appiumProcess.stdout.on('data', (data) => log(`[Appium] ${data.toString().trim()}`, 'info'));
-        appiumProcess.stderr.on('data', (data) => log(`[Appium] ${data.toString().trim()}`, 'error'));
-        appiumProcess.on('close', (code) => {
-            log(`Appium exited with code ${code}`, 'warning');
-            appiumProcess = null;
-            sendMessage({ type: 'status', backend: !!backendProcess, appium: false });
-        });
-        
-        log(`Appium started with PID ${appiumProcess.pid}`);
-        return { success: true, pid: appiumProcess.pid };
-    } catch (error) {
-        const errorMsg = `Error starting Appium: ${error.message}`;
-        log(errorMsg, 'error');
-        return { success: false, error: errorMsg, code: 'APPIUM_START_ERROR' };
-    }
-}
-
-// Stop servers
-function stopServers() {
-    if (backendProcess) process.kill(backendProcess.pid);
-    if (appiumProcess) process.kill(appiumProcess.pid);
-    backendProcess = null;
-    appiumProcess = null;
-    return { success: true };
-}
-
-// Handle input
-let inputBuffer = Buffer.alloc(0);
-
-process.stdin.on('readable', () => {
-    let chunk;
-    while ((chunk = process.stdin.read()) !== null) {
-        inputBuffer = Buffer.concat([inputBuffer, chunk]);
-        
-        while (inputBuffer.length >= 4) {
-            const length = inputBuffer.readUInt32LE(0);
-            if (length > 10000000) {
-                log('Invalid message length', 'error');
-                inputBuffer = Buffer.alloc(0);
-                break;
-            }
-            
-            if (inputBuffer.length >= 4 + length) {
-                const payload = inputBuffer.slice(4, 4 + length);
-                inputBuffer = inputBuffer.slice(4 + length);
-                
-                try {
-                    const msg = JSON.parse(payload.toString());
-                    log(`Received: ${msg.command}`);
-                    
-                    switch (msg.command) {
-                        case 'start':
-                            const backendRes = startBackend();
-                            const appiumRes = startAppium();
-                            sendMessage({ type: 'start-result', backend: backendRes, appium: appiumRes });
-                            break;
-                        case 'stop':
-                            stopServers();
-                            sendMessage({ type: 'stop-result', data: { success: true } });
-                            break;
-                        case 'status':
-                            sendMessage({ type: 'status', backend: !!backendProcess, appium: !!appiumProcess });
-                            break;
-                    }
-                } catch (error) {
-                    log(`Error: ${error.message}`, 'error');
-                }
-            } else {
-                break;
-            }
-        }
-    }
-});
-
-process.on('exit', () => stopServers());
-process.on('SIGTERM', () => process.exit(0));
-process.on('SIGINT', () => process.exit(0));
-process.stdout.on('error', () => process.exit(0));
-
-log('Native host launcher started');
-LAUNCHEREOF
-
-chmod +x "$NATIVE_HOST_DIR/launcher.js"
-
-echo "[4/5] Creating manifest file..."
-cat > "$NATIVE_HOST_DIR/$HOST_NAME.json" <<EOF
-{
-  "name": "$HOST_NAME",
-  "description": "LocatorLens Native Messaging Host",
-  "path": "$NATIVE_HOST_DIR/host.sh",
-  "type": "stdio",
-  "allowed_origins": [
-    "chrome-extension://$EXTENSION_ID/"
+MANIFEST_CONTENT="{
+  \"name\": \"$HOST_NAME\",
+  \"description\": \"LocatorLens Native Messaging Host\",
+  \"path\": \"$NATIVE_HOST_DIR/host.sh\",
+  \"type\": \"stdio\",
+  \"allowed_origins\": [
+    \"chrome-extension://$EXTENSION_ID/\"
   ]
+}"
+
+echo "$MANIFEST_CONTENT" > "$NATIVE_HOST_DIR/$HOST_NAME.json"
+
+# --- Step 6: Install manifest for each browser ---
+echo "[6/6] Installing for browsers..."
+
+install_for_browser() {
+    local BROWSER_NAME="$1"
+    local NMH_DIR="$2"
+    local PARENT_DIR="$(dirname "$NMH_DIR")"
+
+    if [ -d "$PARENT_DIR" ]; then
+        mkdir -p "$NMH_DIR"
+        cp "$NATIVE_HOST_DIR/$HOST_NAME.json" "$NMH_DIR/"
+        echo "  OK $BROWSER_NAME"
+    else
+        echo "  - $BROWSER_NAME (not installed, skipped)"
+    fi
 }
-EOF
 
-echo "[5/5] Installing native host..."
-
-# Install for Chrome
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    CHROME_PARENT="$HOME/Library/Application Support/Google/Chrome"
-elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    CHROME_PARENT="$HOME/.config/google-chrome"
-fi
-
-if [ -n "$CHROME_PARENT" ] && [ -d "$CHROME_PARENT" ]; then
-    mkdir -p "$CHROME_DIR"
-    cp "$NATIVE_HOST_DIR/$HOST_NAME.json" "$CHROME_DIR/"
-    echo "  ✓ Chrome: Installed"
-else
-    echo "  ⊗ Chrome: Not found (skipped)"
-fi
-
-# Install for Edge
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    EDGE_PARENT="$HOME/Library/Application Support/Microsoft Edge"
-elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    EDGE_PARENT="$HOME/.config/microsoft-edge"
-fi
-
-if [ -n "$EDGE_PARENT" ] && [ -d "$EDGE_PARENT" ]; then
-    mkdir -p "$EDGE_DIR"
-    cp "$NATIVE_HOST_DIR/$HOST_NAME.json" "$EDGE_DIR/"
-    echo "  ✓ Edge: Installed"
-else
-    echo "  ⊗ Edge: Not found (skipped)"
-fi
+install_for_browser "Google Chrome" "$CHROME_NMH_DIR"
+install_for_browser "Chromium" "$CHROMIUM_NMH_DIR"
+install_for_browser "Microsoft Edge" "$EDGE_NMH_DIR"
+install_for_browser "Brave Browser" "$BRAVE_NMH_DIR"
 
 echo ""
 echo "========================================"
-echo "Installation Complete!"
+echo " Installation Complete!"
 echo "========================================"
 echo ""
-echo "Files installed to: $NATIVE_HOST_DIR"
-echo "Manifest: $CHROME_DIR/$HOST_NAME.json"
+echo "Installed to: $INSTALL_BASE"
 echo ""
 echo "NEXT STEPS:"
-echo "1. Go to chrome://extensions"
-echo "2. Find LocatorLens and click the reload icon"
-echo "3. Click the extension icon and try 'Start Servers'"
+echo "  1. Install Appium (if not already):"
+echo "     npm install -g appium"
+echo "     appium driver install uiautomator2   # for Android"
+echo "     appium driver install xcuitest        # for iOS"
+echo ""
+echo "  2. Go to chrome://extensions"
+echo "  3. Find LocatorLens and click the reload icon"
+echo "  4. Click the LocatorLens extension icon"
+echo "  5. Click 'Start Servers' and connect your device"
+echo ""
+echo "Logs: $HOME/.locatorlens/native-host.log"
 echo ""

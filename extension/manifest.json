@@ -37,7 +37,7 @@
                 "installers/*"
             ],
             "matches": [
-                "<all_urls>"
+                "chrome-extension://*/*"
             ]
         }
     ]

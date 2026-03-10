@@ -267,12 +267,28 @@ async function handleDeviceConnection(deviceInfo) {
             // Open inspector in new tab
             const inspectorUrl = chrome.runtime.getURL('inspector/inspector.html');
             chrome.tabs.create({ url: inspectorUrl });
+
+            // Notify popup of success
+            chrome.runtime.sendMessage({
+                type: 'device-connection-result',
+                success: true,
+                device: deviceInfo.name
+            }).catch(() => {});
         } else {
             console.error('Background: session creation failed', data.error);
-            // Could show a notification here if desired
+            chrome.runtime.sendMessage({
+                type: 'device-connection-result',
+                success: false,
+                error: data.error || 'Session creation failed'
+            }).catch(() => {});
         }
     } catch (error) {
         console.error('Background: connection error', error.message);
+        chrome.runtime.sendMessage({
+            type: 'device-connection-result',
+            success: false,
+            error: error.message || 'Connection failed'
+        }).catch(() => {});
     }
 }
 
@@ -316,3 +332,11 @@ chrome.runtime.onInstalled.addListener(() => {
     console.log('Locator Builder installed');
     connectToNativeHost();
 });
+
+// Periodically check if native host is still connected, reconnect if needed
+setInterval(() => {
+    if (!nativePort && nativeHostAvailable) {
+        console.log('Native host lost, attempting reconnect...');
+        connectToNativeHost();
+    }
+}, 30000);
