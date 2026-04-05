@@ -4,3 +4,5 @@ node_modules/
 backend/temp_*.png
 .env
 *.zip
+*.pem
+*.crx
