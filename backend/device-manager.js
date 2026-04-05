@@ -79,6 +79,9 @@ class DeviceManager {
      * @returns {Promise<Array>} Array of simulator objects
      */
     async listIOSSimulators() {
+        // xcrun is macOS-only
+        if (process.platform === 'win32') return [];
+
         try {
             const output = execSync('xcrun simctl list devices booted --json', { encoding: 'utf-8', timeout: EXEC_TIMEOUT });
             const data = JSON.parse(output);
@@ -148,6 +151,9 @@ class DeviceManager {
      * Check if iOS tools are available
      */
     isIOSToolsAvailable() {
+        // xcrun is macOS-only
+        if (process.platform === 'win32') return false;
+
         try {
             execSync('xcrun simctl help', { encoding: 'utf-8', timeout: 5000 });
             return true;

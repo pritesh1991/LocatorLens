@@ -54,7 +54,20 @@ echo [3/6] Setting up backend...
 
 :: Detect if running from inside repo (installer is at extension\installers\install_host.bat)
 set "SCRIPT_DIR=%~dp0"
-set "REPO_BACKEND=%SCRIPT_DIR%..\..\backend"
+set "CURRENT_DIR=%CD%"
+
+:: Normalize the repository root to an absolute path relative to the script location.
+set "REPO_ROOT=%SCRIPT_DIR%..\.."
+for %%I in ("%REPO_ROOT%") do set "REPO_ROOT=%%~fI"
+
+:: Fallback: if repo root detection fails, use the current working directory.
+if not exist "%REPO_ROOT%\native-host\launcher.js" (
+    set "REPO_ROOT=!CURRENT_DIR!"
+    for %%I in ("!REPO_ROOT!") do set "REPO_ROOT=%%~fI"
+)
+
+set "REPO_BACKEND=%REPO_ROOT%\backend"
+set "REPO_LAUNCHER=%REPO_ROOT%\native-host\launcher.js"
 
 if exist "%REPO_BACKEND%\server.js" (
     echo   Found backend in repository
@@ -85,17 +98,19 @@ echo   OK Dependencies installed
 echo [4/6] Creating native host files...
 if not exist "%NATIVE_HOST_DIR%" mkdir "%NATIVE_HOST_DIR%"
 
-:: Copy launcher.js from native-host directory if available
-set "REPO_LAUNCHER=%SCRIPT_DIR%..\..\native-host\launcher.js"
-if exist "%REPO_LAUNCHER%" (
-    copy /Y "%REPO_LAUNCHER%" "%NATIVE_HOST_DIR%\launcher.js" >nul
-    echo   OK Copied launcher.js
-) else (
-    echo   ERROR: launcher.js not found at %REPO_LAUNCHER%
-    echo   Please run this installer from inside the extracted release folder.
+:: __EMBEDDED_LAUNCHER_JS__
+if not exist "%NATIVE_HOST_DIR%\launcher.js" (
+    if exist "%REPO_LAUNCHER%" (
+        copy /Y "%REPO_LAUNCHER%" "%NATIVE_HOST_DIR%\launcher.js" >nul
+    )
+)
+if not exist "%NATIVE_HOST_DIR%\launcher.js" (
+    echo   ERROR: launcher.js not found.
+    echo   Download the installer from the extension Options page.
     pause
     exit /b 1
 )
+echo   OK launcher.js installed
 
 :: Write host.bat wrapper
 echo @echo off > "%NATIVE_HOST_DIR%\host.bat"
@@ -123,17 +138,37 @@ echo [6/6] Registering with browsers...
 
 set "MANIFEST_PATH=%NATIVE_HOST_DIR%\%HOST_NAME%.json"
 
-:: Google Chrome
-REG ADD "HKCU\Software\Google\Chrome\NativeMessagingHosts\%HOST_NAME%" /ve /t REG_SZ /d "%MANIFEST_PATH%" /f >nul 2>&1
-echo   OK Google Chrome
+:: Create a temporary .reg file for more reliable registry import
+set "TEMP_REG=%TEMP%\locatorlens_host_%RANDOM%.reg"
 
-:: Microsoft Edge
-REG ADD "HKCU\Software\Microsoft\Edge\NativeMessagingHosts\%HOST_NAME%" /ve /t REG_SZ /d "%MANIFEST_PATH%" /f >nul 2>&1
-echo   OK Microsoft Edge
+(
+echo Windows Registry Editor Version 5.00
+echo.
+echo [HKEY_CURRENT_USER\Software\Google\Chrome\NativeMessagingHosts\%HOST_NAME%]
+echo @="%MANIFEST_PATH:\=\\%"
+echo.
+echo [HKEY_CURRENT_USER\Software\Microsoft\Edge\NativeMessagingHosts\%HOST_NAME%]
+echo @="%MANIFEST_PATH:\=\\%"
+echo.
+echo [HKEY_CURRENT_USER\Software\BraveSoftware\Brave-Browser\NativeMessagingHosts\%HOST_NAME%]
+echo @="%MANIFEST_PATH:\=\\%"
+) > "%TEMP_REG%"
 
-:: Brave Browser
-REG ADD "HKCU\Software\BraveSoftware\Brave-Browser\NativeMessagingHosts\%HOST_NAME%" /ve /t REG_SZ /d "%MANIFEST_PATH%" /f >nul 2>&1
-echo   OK Brave Browser
+:: Import the registry file
+reg import "%TEMP_REG%" >nul 2>&1
+if errorlevel 1 (
+    echo   WARNING: Registry import via native method failed. Attempting direct REG ADD...
+    REG ADD "HKCU\Software\Google\Chrome\NativeMessagingHosts\%HOST_NAME%" /ve /t REG_SZ /d "%MANIFEST_PATH%" /f
+    REG ADD "HKCU\Software\Microsoft\Edge\NativeMessagingHosts\%HOST_NAME%" /ve /t REG_SZ /d "%MANIFEST_PATH%" /f
+    REG ADD "HKCU\Software\BraveSoftware\Brave-Browser\NativeMessagingHosts\%HOST_NAME%" /ve /t REG_SZ /d "%MANIFEST_PATH%" /f
+) else (
+    echo   OK Google Chrome
+    echo   OK Microsoft Edge
+    echo   OK Brave Browser
+)
+
+:: Clean up temp file
+if exist "%TEMP_REG%" del /Q "%TEMP_REG%" >nul 2>&1
 
 echo.
 echo ==================================================

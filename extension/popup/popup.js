@@ -1,4 +1,4 @@
-const BACKEND_URL = 'http://localhost:8765';
+let BACKEND_URL = 'http://localhost:8765';
 
 // DOM Elements
 const platformSelect = document.getElementById('platform-select');
@@ -28,11 +28,21 @@ let serverStatus = { backend: false, appium: false };
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    setupEventListeners();
+    chrome.storage.sync.get({ backendPort: 8765 }, (s) => {
+        BACKEND_URL = `http://localhost:${s.backendPort}`;
 
-    // Poll for status
-    updateServerStatus();
-    setInterval(updateServerStatus, 2000);
+        setupEventListeners();
+
+        // Load existing log history
+        chrome.runtime.sendMessage({ type: 'request-logs' }, (response) => {
+            if (chrome.runtime.lastError || !response?.logs) return;
+            response.logs.forEach(entry => addLogEntry(entry.message, entry.level));
+        });
+
+        // Poll for status
+        updateServerStatus();
+        setInterval(updateServerStatus, 2000);
+    });
 });
 
 function setupEventListeners() {

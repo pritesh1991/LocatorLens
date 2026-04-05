@@ -9,7 +9,7 @@
         "tabs"
     ],
     "host_permissions": [
-        "http://localhost:8765/*"
+        "http://localhost/*"
     ],
     "action": {
         "default_popup": "popup/popup.html",
@@ -34,7 +34,9 @@
     "web_accessible_resources": [
         {
             "resources": [
-                "installers/*"
+                "installers/install_host.sh",
+                "installers/install_host.bat",
+                "installers/launcher.js"
             ],
             "matches": [
                 "chrome-extension://*/*"

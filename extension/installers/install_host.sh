@@ -134,20 +134,24 @@ if [ -z "\$NODE" ]; then
     exit 1
 fi
 
-exec "\$NODE" "$(realpath $NATIVE_HOST_DIR)/launcher.js"
+exec "\$NODE" "$(realpath "$NATIVE_HOST_DIR")/launcher.js"
 HOSTEOF
 chmod +x "$NATIVE_HOST_DIR/host.sh"
 
-# Copy launcher.js from native-host directory if available
+# __EMBEDDED_LAUNCHER_JS__
 REPO_LAUNCHER="$SCRIPT_DIR/../../native-host/launcher.js"
-if [ -f "$REPO_LAUNCHER" ]; then
-    cp "$(realpath $REPO_LAUNCHER)" "$NATIVE_HOST_DIR/launcher.js"
-    chmod +x "$NATIVE_HOST_DIR/launcher.js"
-    echo "  OK Native host files created"
-else
-    echo "  ERROR: launcher.js not found at $REPO_LAUNCHER"
+if [ ! -f "$NATIVE_HOST_DIR/launcher.js" ]; then
+    if [ -f "$REPO_LAUNCHER" ]; then
+        cp "$(realpath "$REPO_LAUNCHER")" "$NATIVE_HOST_DIR/launcher.js"
+        chmod +x "$NATIVE_HOST_DIR/launcher.js"
+    fi
+fi
+if [ ! -f "$NATIVE_HOST_DIR/launcher.js" ]; then
+    echo "  ERROR: launcher.js not found."
+    echo "  Download the installer from the extension Options page."
     exit 1
 fi
+echo "  OK launcher.js installed"
 
 # --- Step 5: Create native messaging manifest ---
 echo "[5/6] Creating native messaging manifest..."

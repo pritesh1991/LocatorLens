@@ -1,5 +1,5 @@
 const { remote } = require('webdriverio');
-const { APPIUM_URL } = require('./config');
+const { APPIUM_HOST, APPIUM_PORT } = require('./config');
 
 const SESSION_CREATE_TIMEOUT = 120000; // 2 minutes for session creation (WDA build can be slow)
 const COMMAND_TIMEOUT = 30000; // 30 seconds for individual commands
@@ -28,8 +28,8 @@ class AppiumClient {
             const capabilities = this.buildCapabilities(deviceInfo);
 
             const driver = await remote({
-                hostname: 'localhost',
-                port: 4723,
+                hostname: APPIUM_HOST,
+                port: parseInt(APPIUM_PORT),
                 path: '/',
                 capabilities,
                 connectionRetryTimeout: SESSION_CREATE_TIMEOUT,

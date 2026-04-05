@@ -1,6 +1,7 @@
 // State
 let logs = [];
 let currentFilter = 'all';
+let autoScroll = true;
 
 // DOM Elements
 const logsContent = document.getElementById('logs-content');
@@ -40,8 +41,10 @@ function setupEventListeners() {
 }
 
 function loadInitialLogs() {
-    // Request existing logs from background script
-    chrome.runtime.sendMessage({ type: 'request-logs' });
+    chrome.runtime.sendMessage({ type: 'request-logs' }, (response) => {
+        if (chrome.runtime.lastError || !response?.logs) return;
+        response.logs.forEach(log => addLogEntry(log.message, log.level, log.timestamp));
+    });
 }
 
 function addLogEntry(message, level = 'info', timestamp = null) {

@@ -1,5 +1,5 @@
-const BACKEND_URL = 'http://localhost:8765';
-const WS_URL = 'ws://localhost:8765';
+let BACKEND_URL = 'http://localhost:8765';
+let WS_URL = 'ws://localhost:8765';
 
 // Reconnection config
 const WS_RECONNECT_BASE_DELAY = 1000; // Start at 1 second
@@ -45,6 +45,10 @@ const sunIcon = document.getElementById('sun-icon');
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
+    const settings = await new Promise(r => chrome.storage.sync.get({ backendPort: 8765 }, r));
+    BACKEND_URL = `http://localhost:${settings.backendPort}`;
+    WS_URL = `ws://localhost:${settings.backendPort}`;
+
     await loadTheme();
     await loadSession();
     setupEventListeners();
@@ -253,12 +257,14 @@ function handleWebSocketMessage(message) {
 function startStreaming() {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
-    ws.send(JSON.stringify({
-        type: 'start-streaming',
-        platform: sessionInfo.device.platform,
-        deviceId: sessionInfo.device.id,
-        fps: 3
-    }));
+    chrome.storage.sync.get({ fpsLimit: 3 }, (settings) => {
+        ws.send(JSON.stringify({
+            type: 'start-streaming',
+            platform: sessionInfo.device.platform,
+            deviceId: sessionInfo.device.id,
+            fps: settings.fpsLimit
+        }));
+    });
     // Page source is requested when 'streaming-started' is received,
     // ensuring ws.deviceId is set on the server before we ask for it.
 }

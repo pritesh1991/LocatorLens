@@ -81,7 +81,7 @@ function connectToNativeHost() {
 
         nativePort.onDisconnect.addListener(() => {
             console.log("Native host disconnected:", chrome.runtime.lastError);
-            const errorMsg = chrome.runtime.lastError?.message || 'Unknown error';
+
             nativeHostAvailable = false;
             nativePort = null;
             serverStatus = { backend: false, appium: false };
@@ -96,6 +96,9 @@ function connectToNativeHost() {
                 // Provide helpful messages for common errors
                 if (error.includes('Specified native messaging host not found')) {
                     userMessage = 'Native host not found. Please run install_host.sh (macOS/Linux) or install_host.bat (Windows) to install the native messaging host.';
+                    helpNeeded = true;
+                } else if (error.includes('Access to the specified native messaging host is forbidden')) {
+                    userMessage = 'Access to the native messaging host is forbidden. Open Options, re-download and re-run the installer, then reload the extension.';
                     helpNeeded = true;
                 } else if (error.includes('Native host has exited')) {
                     userMessage = 'Native host crashed. Check that Node.js is installed and in your PATH.';
@@ -177,38 +180,36 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     } else if (request.type === 'start-server') {
         console.log('[Background] Start server requested, nativePort:', nativePort ? 'connected' : 'not connected');
 
-        if (!nativePort) {
-            console.log('[Background] Attempting to connect to native host...');
-            connectToNativeHost();
+        // Read settings then send start command
+        chrome.storage.sync.get({ backendPort: 8765, appiumUrl: 'http://localhost:4723' }, (settings) => {
+            let appiumPort = 4723;
+            try { appiumPort = parseInt(new URL(settings.appiumUrl).port) || 4723; } catch (e) {}
+            const startCmd = { command: 'start', backendPort: settings.backendPort, appiumPort };
 
-            // Give it a moment to connect or fail (async operation)
-            setTimeout(() => {
-                if (nativePort) {
-                    console.log('[Background] Sending start command to native host');
-                    nativePort.postMessage({ command: 'start' });
-                    sendResponse({ success: true });
-                } else {
-                    console.error('[Background] Could not connect to native host after waiting');
-                    sendResponse({
-                        success: false,
-                        error: 'Could not connect to native host. Please run install_host.sh (macOS/Linux) or install_host.bat (Windows) first.'
-                    });
-                }
-            }, 100);
-            return true; // Will respond asynchronously
-        }
+            if (!nativePort) {
+                console.log('[Background] Attempting to connect to native host...');
+                connectToNativeHost();
 
-        if (nativePort) {
-            console.log('[Background] Sending start command to native host');
-            nativePort.postMessage({ command: 'start' });
-            sendResponse({ success: true });
-        } else {
-            console.error('[Background] Could not connect to native host');
-            sendResponse({
-                success: false,
-                error: 'Could not connect to native host. Please run install_host.sh (macOS/Linux) or install_host.bat (Windows) first.'
-            });
-        }
+                setTimeout(() => {
+                    if (nativePort) {
+                        console.log('[Background] Sending start command to native host');
+                        nativePort.postMessage(startCmd);
+                        sendResponse({ success: true });
+                    } else {
+                        console.error('[Background] Could not connect to native host after waiting');
+                        sendResponse({
+                            success: false,
+                            error: 'Could not connect to native host. Please run install_host.sh (macOS/Linux) or install_host.bat (Windows) first.'
+                        });
+                    }
+                }, 100);
+            } else {
+                console.log('[Background] Sending start command to native host');
+                nativePort.postMessage(startCmd);
+                sendResponse({ success: true });
+            }
+        });
+        return true; // Will respond asynchronously
     } else if (request.type === 'stop-server') {
         if (nativePort) {
             nativePort.postMessage({ command: 'stop' });
@@ -223,9 +224,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         handleOpenLogsTab();
         sendResponse({ success: true });
     } else if (request.type === 'request-logs') {
-        // Send initial logs to newly opened logs tab
-        sendResponse({ success: true });
-        // Send logs to the requesting tab
+        // Return logs directly in response (works for both popup and logs tab)
+        sendResponse({ success: true, logs: logHistory });
+        // Also send to logs tab if it's a tab (not popup)
         if (sender.tab && sender.tab.id) {
             chrome.tabs.sendMessage(sender.tab.id, {
                 type: 'initial-logs',
@@ -236,15 +237,23 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true; // Keep channel open for async response
 });
 
-const BACKEND_URL = 'http://localhost:8765';
+function getBackendUrl(port) {
+    return `http://localhost:${port || 8765}`;
+}
 
 // Handle device connection in background - runs even if popup closes
 async function handleDeviceConnection(deviceInfo) {
     console.log('Background: connecting to device', deviceInfo.name);
 
+    // Read backend port from settings
+    const settings = await new Promise(resolve =>
+        chrome.storage.sync.get({ backendPort: 8765 }, resolve)
+    );
+    const backendUrl = getBackendUrl(settings.backendPort);
+
     try {
         // Create Appium session
-        const response = await fetch(`${BACKEND_URL}/api/session/create`, {
+        const response = await fetch(`${backendUrl}/api/session/create`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ deviceInfo })
