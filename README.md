@@ -1,4 +1,4 @@
-# <img src="extension/icons/icon128.png" width="32" height="32" alt=""> LocatorLens
+<h1><img src="extension/icons/icon128.png" width="28" height="28" align="absmiddle"> LocatorLens</h1>
 
 **Real-time Element Inspector & Locator Builder for Appium (Android & iOS)**
 
