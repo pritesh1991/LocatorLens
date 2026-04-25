@@ -4,61 +4,29 @@
 
 Inspect mobile app elements, generate locators, and see a live screen mirror — all from your browser. Works with **any app on any device**, no code changes or app modifications required.
 
----
-
-## LocatorLens vs Appium Inspector
-
-The [Appium Inspector](https://github.com/appium/appium-inspector) is the official desktop tool. LocatorLens is a browser extension that takes a fundamentally different approach.
-
-| Feature | LocatorLens | Appium Inspector |
-|---------|------------|-----------------|
-| **Distribution** | Chrome Extension — no install, auto-updates | Desktop app (Electron) — manual download & updates |
-| **Startup** | One click — servers start automatically | Manual: start Appium, configure capabilities, create session |
-| **Session setup** | Zero configuration — inspects whatever is on screen | Requires capabilities JSON per app (package, activity, bundleId…) |
-| **Live screen mirror** | Yes — continuous streaming up to 30 FPS | Static snapshot — manual refresh |
-| **Auto-refresh on change** | Yes — detects screen changes, auto-refreshes XML | No — click Refresh manually |
-| **Multi-strategy output** | All 7+ strategies generated simultaneously with uniqueness badges | One strategy at a time, no uniqueness check |
-| **Uniqueness validation** | Green/orange badge shows how many elements match each locator | Not available |
-| **Click to inspect** | Click directly on the live screen mirror | Click on the screenshot (static) |
-| **Hover to highlight** | Hover over element tree → highlights on screen overlay | Limited |
-| **Interact mode** | Tap elements on device from within the browser | Separate action panel |
-| **Appium methods preview** | Shows `getText()`, `getAttribute()`, `getRect()`, `isEnabled()` live | Attribute panel only |
-| **App switching** | Inspect any app without reconfiguring | Must create a new session for each app |
-| **Log viewer** | Built-in full-page log viewer with filtering | Separate terminal window |
-| **Theme** | Dark / light mode | Fixed |
-| **Platform** | Browser — works on any OS Chrome runs on | macOS, Windows, Linux (separate installers) |
-
-**When to use Appium Inspector:** Deep session configuration, remote Appium grids, advanced capability tweaking.
-
-**When to use LocatorLens:** Day-to-day locator building, exploratory testing, fast iteration.
+![Node.js](https://img.shields.io/badge/Node.js-18%2B-brightgreen?logo=nodedotjs&logoColor=white)
+![Appium](https://img.shields.io/badge/Appium-2.x-6c47ff?logo=appium&logoColor=white)
+![Chrome](https://img.shields.io/badge/Chrome-Extension-4285F4?logo=googlechrome&logoColor=white)
+![Manifest V3](https://img.shields.io/badge/Manifest-V3-34a853?logoColor=white)
+![Android](https://img.shields.io/badge/Android-supported-3ddc84?logo=android&logoColor=white)
+![iOS](https://img.shields.io/badge/iOS-supported-000000?logo=apple&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-yellow)
 
 ---
 
-## Why LocatorLens?
+## Table of Contents
 
-Writing Appium tests is slow when you have to guess element locators, run the test, see it fail, and repeat. LocatorLens eliminates that loop entirely.
-
-**Connect once. Inspect anything. Copy and go.**
-
-| Without LocatorLens | With LocatorLens |
-|---------------------|-----------------|
-| Write test → run → fail → inspect logs → guess locator → repeat | Click element → copy locator → done |
-| Need to know app internals or read source XML manually | Visual, point-and-click inspection |
-| One locator strategy at a time | All strategies generated simultaneously |
-| Risk of non-unique locators breaking tests | Match count shows uniqueness instantly |
-| Restart session to inspect a different app | Switch apps freely — no reconfiguration |
-
----
-
-## Works With Any App — No Configuration Needed
-
-LocatorLens connects to your **running Appium session** and inspects whatever is currently on screen. You don't need to:
-
-- Specify a bundle ID or package name
-- Modify the app or add test hooks
-- Configure anything per-app
-
-Just connect to your device and start inspecting — switch between apps freely during the same session. Open Settings, open a game, open a banking app — LocatorLens sees it all.
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [How It Works](#how-it-works)
+- [Settings](#settings)
+- [Platform Support](#platform-support)
+- [LocatorLens vs Appium Inspector](#locatorlens-vs-appium-inspector)
+- [Troubleshooting](#troubleshooting)
+- [Project Structure](#project-structure)
+- [License](#license)
 
 ---
 
@@ -88,15 +56,43 @@ Just connect to your device and start inspecting — switch between apps freely 
 
 ---
 
+## Quick Start
+
+> Get up and running in under 5 minutes.
+
+1. **Install prerequisites** — Node.js 18+, Appium 2.x, and the relevant driver (see [Prerequisites](#prerequisites))
+2. **Install the extension** — from the Chrome Web Store or load unpacked (see [Installation](#installation))
+3. **Run the native host installer** — from the extension's Settings page
+4. **Connect your device** — start your Android device (USB debugging on) or boot an iOS simulator
+5. **Click the extension icon** → **Start Servers** → select platform and device → **Connect**
+6. **Start inspecting** — click any element on the screen mirror to see all its locators
+
+That's it. Open any app on your device and keep inspecting — no reconnection needed.
+
+---
+
+## Prerequisites
+
+| Requirement | Version | Purpose | Install |
+|-------------|---------|---------|---------|
+| **Node.js** | 18+ | Runs the backend server | [nodejs.org](https://nodejs.org) |
+| **Appium** | 2.x | Mobile automation server | `npm install -g appium` |
+| **UIAutomator2 driver** | latest | Android support | `appium driver install uiautomator2` |
+| **XCUITest driver** | latest | iOS support (macOS only) | `appium driver install xcuitest` |
+| **ADB** | latest | Android device communication | [Android Platform Tools](https://developer.android.com/studio/releases/platform-tools) |
+| **Xcode** | latest | iOS simulator support (macOS only) | Mac App Store |
+
+---
+
 ## Installation
 
-### From Chrome Web Store (Recommended)
+### Option 1 — Chrome Web Store (Recommended)
 
 1. Install **LocatorLens** from the [Chrome Web Store](#) *(coming soon)*
 2. Click the extension icon → **Settings**
-3. Follow the **Setup Guide** on the settings page
+3. Follow the **Setup Guide** on the settings page — it walks you through the native host install
 
-### For Developers (Load Unpacked)
+### Option 2 — Load Unpacked (Developers)
 
 ```bash
 # Clone the repo
@@ -105,66 +101,23 @@ cd LocatorLens
 
 # Install backend dependencies
 cd backend && npm install && cd ..
-
-# Load extension in Chrome:
-# 1. Go to chrome://extensions
-# 2. Enable Developer Mode
-# 3. Click "Load Unpacked" → select the /extension folder
-
-# Install native messaging host (run the installer from Settings page,
-# or manually):
-bash install_host.sh          # macOS / Linux
-install_host.bat              # Windows (Command Prompt)
 ```
 
----
+Then load the extension in Chrome:
 
-## Quick Start
+1. Go to `chrome://extensions`
+2. Enable **Developer Mode** (top right)
+3. Click **Load Unpacked** → select the `/extension` folder
 
-1. Start your Android device (USB debugging on) or boot an iOS simulator
-2. Click the LocatorLens extension icon → **Start Servers**
-3. Select your platform and device → **Connect**
-4. The Inspector opens automatically
-5. Click any element on the screen mirror to see all its locators
+Then install the native host:
 
-That's it. Open any app on your device and keep inspecting — no reconnection needed.
+```bash
+# macOS / Linux
+bash extension/installers/install_host.sh
 
----
-
-## Prerequisites
-
-| Requirement | Purpose | Install |
-|-------------|---------|---------|
-| **Node.js** v18+ | Runs the backend server | [nodejs.org](https://nodejs.org) |
-| **Appium** v2+ | Mobile automation server | `npm install -g appium` |
-| **UIAutomator2 driver** | Android support | `appium driver install uiautomator2` |
-| **XCUITest driver** | iOS support (macOS only) | `appium driver install xcuitest` |
-| **ADB** | Android device communication | [Android Platform Tools](https://developer.android.com/studio/releases/platform-tools) |
-| **Xcode** | iOS simulator support (macOS only) | Mac App Store |
-
----
-
-## Platform Support
-
-| Platform | Android | iOS Simulator | Notes |
-|----------|---------|--------------|-------|
-| macOS | ✓ | ✓ | Full support |
-| Windows | ✓ | ✗ | iOS requires macOS |
-| Linux | ✓ | ✗ | iOS requires macOS |
-
----
-
-## Settings
-
-Open the extension **Settings** page to configure:
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| Backend Port | `8765` | Port the Node.js backend listens on |
-| Appium URL | `http://localhost:4723` | Appium server address and port |
-| Screen Mirror FPS | `3` | Frames per second for live screen streaming (1–30) |
-
-Settings take effect on the next **Start Servers**.
+# Windows (Command Prompt — not PowerShell)
+extension\installers\install_host.bat
+```
 
 ---
 
@@ -186,10 +139,59 @@ Settings take effect on the next **Start Servers**.
 ```
 
 1. Extension sends a `start` command to a native host via Chrome's native messaging API
-2. Native host starts the Node.js backend and Appium server with the configured ports
-3. Extension connects to backend over WebSocket for live screen streaming
+2. Native host starts the Node.js backend and Appium server
+3. Extension connects to the backend over WebSocket for live screen streaming
 4. Backend uses Appium to capture screenshots and page source XML for whatever app is in the foreground
 5. Extension renders the screen mirror and generates locators from the XML
+
+---
+
+## Settings
+
+Open the extension **Settings** page to configure:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Backend Port | `8765` | Port the Node.js backend listens on |
+| Appium URL | `http://localhost:4723` | Appium server address and port |
+| Screen Mirror FPS | `3` | Frames per second for live screen streaming (1–30) |
+
+Settings take effect on the next **Start Servers**.
+
+---
+
+## Platform Support
+
+| Platform | Android | iOS Simulator | Notes |
+|----------|:-------:|:------------:|-------|
+| macOS | ✅ | ✅ | Full support |
+| Windows | ✅ | ❌ | iOS requires macOS |
+| Linux | ✅ | ❌ | iOS requires macOS |
+
+---
+
+## LocatorLens vs Appium Inspector
+
+The [Appium Inspector](https://github.com/appium/appium-inspector) is the official desktop tool. LocatorLens is a browser extension that takes a fundamentally different approach.
+
+| Feature | LocatorLens | Appium Inspector |
+|---------|:-----------:|:----------------:|
+| **Distribution** | Chrome Extension — no install, auto-updates | Desktop app — manual download & updates |
+| **Startup** | One click | Manual: start Appium, configure capabilities, create session |
+| **Session setup** | Zero config — inspects whatever is on screen | Requires capabilities JSON per app |
+| **Live screen mirror** | ✅ Continuous up to 30 FPS | ❌ Static snapshot |
+| **Auto-refresh on change** | ✅ Detects screen changes automatically | ❌ Manual refresh |
+| **Multi-strategy output** | ✅ All 7+ strategies simultaneously | One at a time |
+| **Uniqueness validation** | ✅ Match count badge | ❌ Not available |
+| **Click to inspect** | ✅ On live mirror | Static screenshot |
+| **Interact mode** | ✅ Tap from browser | Separate panel |
+| **App switching** | ✅ Any app, no reconfiguration | New session required |
+| **Log viewer** | ✅ Built-in with filtering | Separate terminal |
+| **Dark / light theme** | ✅ | ❌ Fixed |
+
+**When to use Appium Inspector:** Deep session configuration, remote Appium grids, advanced capability tweaking.
+
+**When to use LocatorLens:** Day-to-day locator building, exploratory testing, fast iteration.
 
 ---
 
@@ -198,14 +200,14 @@ Settings take effect on the next **Start Servers**.
 | Issue | Solution |
 |-------|---------|
 | "Native messaging host not found" | Re-run the installer from Settings and reload the extension |
-| "Access forbidden" error | Re-download and re-run the installer (extension ID changed), then reload |
-| Servers won't start | Check the log viewer in the popup. Ensure Node.js ≥ 18 is installed. |
+| "Access forbidden" error | Re-run the installer (extension ID changed), then reload |
+| Servers won't start | Check the log viewer in the popup. Ensure Node.js ≥ 18 is installed |
 | Appium not found | `npm install -g appium` (use Command Prompt on Windows, not PowerShell) |
 | UiAutomator2 driver missing | `appium driver install uiautomator2` |
-| No Android devices listed | Enable USB debugging. Run `adb devices` in terminal. |
-| No iOS simulators listed | Boot a simulator in Xcode first (macOS only). |
-| Screen capture fails | Check logs. Try disconnecting and reconnecting. |
-| Backend dependencies missing | Re-run the installer — it runs `npm install` automatically. |
+| No Android devices listed | Enable USB debugging. Run `adb devices` in terminal |
+| No iOS simulators listed | Boot a simulator in Xcode first (macOS only) |
+| Screen capture fails | Check logs. Try disconnecting and reconnecting |
+| Backend dependencies missing | Re-run the installer — it runs `npm install` automatically |
 
 **Log file location:**
 - macOS / Linux: `~/.locatorlens/native-host.log`
@@ -217,28 +219,27 @@ Settings take effect on the next **Start Servers**.
 
 ```
 locatorlens/
-├── backend/            # Node.js REST + WebSocket server
+├── backend/                    # Node.js REST + WebSocket server
 │   ├── server.js
 │   ├── appium-client.js
 │   ├── device-manager.js
 │   ├── screen-mirror.js
 │   └── config.js
-├── extension/          # Chrome Extension (Manifest V3)
+├── extension/                  # Chrome Extension (Manifest V3)
 │   ├── manifest.json
 │   ├── background.js
 │   ├── popup/
 │   ├── inspector/
 │   ├── options.html / options.js
 │   ├── logs.html / logs.js
-│   └── installers/     # install_host.sh + install_host.bat + launcher.js
-├── native-host/        # Native messaging host
+│   └── installers/             # install_host.sh, install_host.bat, launcher.js
+├── native-host/                # Native messaging host
 │   └── launcher.js
-├── install_host.sh     # Quick installer (macOS/Linux)
-└── install_host.bat    # Quick installer (Windows)
+└── README.md
 ```
 
 ---
 
 ## License
 
-MIT
+[MIT](LICENSE)
