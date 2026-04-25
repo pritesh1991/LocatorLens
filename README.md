@@ -99,8 +99,9 @@ Just connect to your device and start inspecting — switch between apps freely 
 ### For Developers (Load Unpacked)
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/locatorlens.git
-cd locatorlens
+# Clone the repo
+git clone https://github.com/pritesh1991/LocatorLens.git
+cd LocatorLens
 
 # Install backend dependencies
 cd backend && npm install && cd ..

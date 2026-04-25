@@ -1,5 +1,5 @@
 {
-    "name": "locator-builder",
+    "name": "locatorlens",
     "version": "1.0.0",
     "description": "Chrome extension for identifying locators in Android/iOS apps using Appium",
     "scripts": {
@@ -15,6 +15,6 @@
         "chrome-extension",
         "locator"
     ],
-    "author": "",
+    "author": "Pritesh Patel",
     "license": "MIT"
 }

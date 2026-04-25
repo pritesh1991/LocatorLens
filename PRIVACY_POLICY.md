@@ -1,6 +1,6 @@
 LocatorLens Privacy Policy
 
-Last Updated: January 15, 2026
+Last Updated: April 4, 2026
 
 Data Collection
 LocatorLens does not collect, store, or transmit any personal user data to external servers.
@@ -16,7 +16,6 @@ No data from these communications is transmitted to external servers or third pa
 Permissions Explained
 - storage: Saves your local preferences (server port, Appium URL, FPS settings)
 - nativeMessaging: Communicates with the local Node.js backend on your computer
-- tabs: Opens inspector tabs for app inspection
 - host_permissions (localhost:8765): Connects to your local backend server
 
 Data Storage
@@ -26,7 +25,7 @@ Third-Party Services
 LocatorLens does not integrate with any third-party analytics, tracking, or advertising services.
 
 Contact
-For questions about this privacy policy, please contact: [SUPPORT_EMAIL]
+For questions about this privacy policy, please contact: pritesh1991@gmail.com
 
 Changes to This Policy
 We will update this privacy policy as needed. The "Last Updated" date will reflect any changes.

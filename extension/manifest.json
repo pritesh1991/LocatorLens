@@ -5,8 +5,7 @@
     "description": "Real-time Element Inspector & Locator Builder for Appium (Android & iOS). See app structure, build locators instantly.",
     "permissions": [
         "storage",
-        "nativeMessaging",
-        "tabs"
+        "nativeMessaging"
     ],
     "host_permissions": [
         "http://localhost/*"
