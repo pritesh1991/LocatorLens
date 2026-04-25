@@ -17,7 +17,7 @@ Inspect mobile app elements, generate locators, and see a live screen mirror —
 ## Table of Contents
 
 - [Features](#features)
-- [Screenshots](#screenshots)
+- [Overview](#overview)
 - [Quick Start](#quick-start)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
@@ -56,6 +56,7 @@ Inspect mobile app elements, generate locators, and see a live screen mirror —
 - **Built-in log viewer** — filterable, full-page log view with Info / Warning / Error levels
 
 ---
+## Overview
 ### Extension Home
 
 Start and monitor the LocatorLens servers directly from the Chrome extension popup.
