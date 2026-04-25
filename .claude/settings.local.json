@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(ls -lah /c/Users/patel/locator-builder/*.md /c/Users/patel/locator-builder/*.sh /c/Users/patel/locator-builder/*.bat)"
-    ]
-  }
-}
