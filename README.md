@@ -1,4 +1,4 @@
-# <img src="extension/icons/icon128.png" width="40" height="40" alt="" style="vertical-align:middle"> LocatorLens
+<h1><img src="extension/icons/icon128.png" width="32" height="32" align="absmiddle"> LocatorLens</h1>
 
 **Real-time Element Inspector & Locator Builder for Appium (Android & iOS)**
 
@@ -17,6 +17,7 @@ Inspect mobile app elements, generate locators, and see a live screen mirror —
 ## Table of Contents
 
 - [Features](#features)
+- [Screenshots](#screenshots)
 - [Quick Start](#quick-start)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
@@ -53,6 +54,23 @@ Inspect mobile app elements, generate locators, and see a live screen mirror —
 - **Dark / Light theme** — persists across sessions
 - **Auto-reconnect** — WebSocket reconnects automatically if the backend restarts
 - **Built-in log viewer** — filterable, full-page log view with Info / Warning / Error levels
+
+---
+### Extension Home
+
+Start and monitor the LocatorLens servers directly from the Chrome extension popup.
+
+<p align="center">
+  <img src="docs/screenshots/extension-home.png" alt="LocatorLens extension home popup" width="360">
+</p>
+
+### Inspector
+
+Inspect any foreground app, view the live screen mirror, browse the element tree, and copy generated locators in one place.
+
+![LocatorLens inspector showing Gmail element inspection](docs/screenshots/inspector-gmail.png)
+
+![LocatorLens inspector showing Safari element inspection](docs/screenshots/inspector-safari.png)
 
 ---
 

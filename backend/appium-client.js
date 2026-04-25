@@ -186,6 +186,8 @@ class AppiumClient {
         if (msg.includes('invalid session id') ||
             msg.includes('session not created') ||
             msg.includes('Session not found') ||
+            msg.includes('session is either terminated or not started') ||
+            msg.includes('terminated or not started') ||
             msg.includes('ECONNREFUSED') ||
             msg.includes('ECONNRESET')) {
             console.warn(`Session for ${deviceId} appears dead, marking inactive`);
@@ -272,6 +274,26 @@ class AppiumClient {
             console.error(`Error highlighting element on ${deviceId}:`, error.message);
             throw error;
         }
+    }
+
+    /**
+     * Recreate a dead session using stored deviceInfo
+     * @param {string} deviceId
+     * @returns {Promise<Object>}
+     */
+    async recreateSession(deviceId) {
+        const session = this.sessions.get(deviceId);
+        if (!session || !session.deviceInfo) {
+            return { success: false, error: `No stored device info for ${deviceId}` };
+        }
+
+        const deviceInfo = session.deviceInfo;
+        console.log(`Recreating session for ${deviceInfo.name} (${deviceId})...`);
+
+        // Clean up old session without trying to delete it (it's already dead)
+        this.sessions.delete(deviceId);
+
+        return await this.createSession(deviceInfo);
     }
 
     /**

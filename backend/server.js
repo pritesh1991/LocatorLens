@@ -287,7 +287,30 @@ async function handleGetPageSource(ws) {
             throw new Error('No deviceId associated with this connection. Start streaming first.');
         }
 
-        const source = await appiumClient.getPageSource(deviceId);
+        let source;
+        try {
+            source = await appiumClient.getPageSource(deviceId);
+        } catch (firstError) {
+            // If session is dead, attempt auto-recovery
+            if (!appiumClient.isSessionActive(deviceId)) {
+                console.log(`Session dead for ${deviceId}, attempting auto-recovery...`);
+                ws.send(JSON.stringify({
+                    type: 'info',
+                    message: 'Session lost — reconnecting automatically...'
+                }));
+
+                const result = await appiumClient.recreateSession(deviceId);
+                if (!result.success) {
+                    throw new Error(`Auto-recovery failed: ${result.error}`);
+                }
+
+                console.log(`Session recovered for ${deviceId}, retrying page source...`);
+                source = await appiumClient.getPageSource(deviceId);
+            } else {
+                throw firstError;
+            }
+        }
+
         ws.send(JSON.stringify({
             type: 'page-source',
             data: source,

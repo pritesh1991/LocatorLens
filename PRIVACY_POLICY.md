@@ -16,7 +16,7 @@ No data from these communications is transmitted to external servers or third pa
 Permissions Explained
 - storage: Saves your local preferences (server port, Appium URL, FPS settings)
 - nativeMessaging: Communicates with the local Node.js backend on your computer
-- host_permissions (localhost:8765): Connects to your local backend server
+- host_permissions (localhost): Connects to your local backend server (configurable port, default 8765)
 
 Data Storage
 Any settings you configure are stored locally in your browser using Chrome's storage API and never leave your device.
