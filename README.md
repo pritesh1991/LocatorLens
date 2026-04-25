@@ -1,3 +1,6 @@
+<div align="center">
+  <img src="extension/icons/icon128.png" width="120" height="120" alt="LocatorLens">
+
 # LocatorLens
 
 **Real-time Element Inspector & Locator Builder for Appium (Android & iOS)**
@@ -11,6 +14,8 @@ Inspect mobile app elements, generate locators, and see a live screen mirror —
 ![Android](https://img.shields.io/badge/Android-supported-3ddc84?logo=android&logoColor=white)
 ![iOS](https://img.shields.io/badge/iOS-supported-000000?logo=apple&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
+
+</div>
 
 ---
 
