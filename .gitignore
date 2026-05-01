@@ -1,5 +1,3 @@
-.claude/
-CLAUDE.md
 node_modules/
 *.log
 .DS_Store
@@ -8,3 +6,5 @@ backend/temp_*.png
 *.zip
 *.crx
 *.pem
+*.key
+extension/installers/companion-release.json

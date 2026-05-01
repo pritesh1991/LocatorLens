@@ -2,8 +2,8 @@ document.addEventListener('DOMContentLoaded', () => {
     loadSettings();
     setupTabs();
     document.getElementById('save-btn').addEventListener('click', saveSettings);
-    document.getElementById('download-mac')?.addEventListener('click', () => downloadInstaller('install_host.sh'));
-    document.getElementById('download-windows')?.addEventListener('click', () => downloadInstaller('install_host.bat'));
+    document.getElementById('download-mac')?.addEventListener('click', () => downloadInstaller('install_host.sh', 'install_locatorlens.sh'));
+    document.getElementById('download-windows')?.addEventListener('click', () => downloadInstaller('install_host.bat', 'install_locatorlens.bat'));
     document.getElementById('check-backend-btn')?.addEventListener('click', checkBackendStatus);
 });
 
@@ -27,28 +27,98 @@ function setupTabs() {
     }
 }
 
-async function downloadInstaller(filename) {
+async function loadCompanionRelease() {
+    const response = await fetch(chrome.runtime.getURL('installers/companion-release.json'));
+    if (!response.ok) {
+        throw new Error('Companion release metadata missing');
+    }
+    return response.json();
+}
+
+function applyInstallerTemplate(content, extensionId, release, companionEmbedded) {
+    return content
+        .replace(/set "EXTENSION_ID=[^"]*"/, `set "EXTENSION_ID=${extensionId}"`)
+        .replace(/^EXTENSION_ID="[^"]*"/m, `EXTENSION_ID="${extensionId}"`)
+        .replace(/set "COMPANION_EMBEDDED=[^"]*"/, `set "COMPANION_EMBEDDED=${companionEmbedded ? '1' : '0'}"`)
+        .replace(/^COMPANION_EMBEDDED="[^"]*"/m, `COMPANION_EMBEDDED="${companionEmbedded ? '1' : '0'}"`)
+        .replaceAll('__EXTENSION_ID__', extensionId)
+        .replaceAll('__COMPANION_VERSION__', release.version)
+        .replaceAll('__COMPANION_URL__', release.url)
+        .replaceAll('__COMPANION_SHA256__', release.sha256);
+}
+
+function splitBase64(value, width = 76) {
+    return value.match(new RegExp(`.{1,${width}}`, 'g')) || [];
+}
+
+function arrayBufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    const chunkSize = 0x8000;
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    }
+    return btoa(binary);
+}
+
+async function loadCompanionArchive(release) {
+    const archivePath = release.extensionPath || `installers/${release.filename}`;
+    const response = await fetch(chrome.runtime.getURL(archivePath));
+    if (!response.ok) {
+        throw new Error(`Bundled companion archive missing: ${archivePath}`);
+    }
+    return arrayBufferToBase64(await response.arrayBuffer());
+}
+
+function embedCompanionForShell(content, companionB64) {
+    const lines = splitBase64(companionB64);
+    let embed = `write_embedded_companion() {\n`;
+    embed += `    local DEST="$1"\n`;
+    embed += `    local B64_PATH="$DEST.b64"\n`;
+    embed += `    cat > "$B64_PATH" << 'COMPANION_ZIP_B64_EOF'\n`;
+    embed += `${lines.join('\n')}\n`;
+    embed += `COMPANION_ZIP_B64_EOF\n`;
+    embed += `    if base64 --decode < "$B64_PATH" > "$DEST" 2>/dev/null; then\n`;
+    embed += `        rm -f "$B64_PATH"\n`;
+    embed += `        return 0\n`;
+    embed += `    fi\n`;
+    embed += `    if base64 -D < "$B64_PATH" > "$DEST" 2>/dev/null; then\n`;
+    embed += `        rm -f "$B64_PATH"\n`;
+    embed += `        return 0\n`;
+    embed += `    fi\n`;
+    embed += `    rm -f "$B64_PATH"\n`;
+    embed += `    echo "  ERROR: Could not decode bundled companion archive."\n`;
+    embed += `    exit 1\n`;
+    embed += `}`;
+    return content.replace(/write_embedded_companion\(\) \{[\s\S]*?\n\}\n\n# __EMBEDDED_COMPANION_ZIP__/, `${embed}\n`);
+}
+
+function embedCompanionForBatch(content, companionB64) {
+    return content.replace(
+        ':: __EMBEDDED_COMPANION_ZIP__',
+        splitBase64(companionB64).map(line => `echo.${line}`).join('\r\n')
+    );
+}
+
+async function downloadInstaller(filename, downloadName = filename) {
     const status = document.getElementById('download-status');
     const extensionId = chrome.runtime.id;
 
     try {
-        // Fetch installer template and launcher.js in parallel
-        const [installerResp, launcherResp] = await Promise.all([
+        const [installerResp, launcherResp, release] = await Promise.all([
             fetch(chrome.runtime.getURL(`installers/${filename}`)),
-            fetch(chrome.runtime.getURL('installers/launcher.js'))
+            fetch(chrome.runtime.getURL('installers/launcher.js')),
+            loadCompanionRelease()
         ]);
+        const companionB64 = await loadCompanionArchive(release);
         let content = await installerResp.text();
         const launcherJS = await launcherResp.text();
-        const b64 = btoa(launcherJS);
 
-        // Bake extension ID
-        content = content
-            .replace(/set "EXTENSION_ID=[^"]*"/, `set "EXTENSION_ID=${extensionId}"`)
-            .replace(/^EXTENSION_ID="[^"]*"/m, `EXTENSION_ID="${extensionId}"`);
+        content = applyInstallerTemplate(content, extensionId, release, true);
 
-        // Embed launcher.js into the installer (base64, decoded by Node.js at install time)
+        // Embed launcher.js into the installer (base64, decoded by Node.js at install time).
         if (filename.endsWith('.bat')) {
-            const lines = b64.match(/.{1,76}/g) || [];
+            const lines = splitBase64(btoa(launcherJS));
             let embed = `> "%TEMP%\\ll_launcher_b64.txt" (\r\n`;
             for (const line of lines) embed += `echo.${line}\r\n`;
             embed += `)\r\n`;
@@ -56,7 +126,10 @@ async function downloadInstaller(filename) {
             embed += `del "%TEMP%\\ll_launcher_b64.txt" >nul 2>&1\r\n`;
             embed += `echo   OK Embedded launcher.js`;
             content = content.replace(':: __EMBEDDED_LAUNCHER_JS__', embed);
-        } else {
+            content = embedCompanionForBatch(content, companionB64);
+            content = content.replace(/\r?\n/g, '\r\n');
+        } else if (filename.endsWith('.sh')) {
+            // Keep launcher.js embedded as a fallback for local/dev installs.
             let embed = `cat > "$NATIVE_HOST_DIR/launcher.js" << 'LAUNCHER_EMBEDDED_EOF'\n`;
             embed += launcherJS;
             if (!launcherJS.endsWith('\n')) embed += '\n';
@@ -64,20 +137,21 @@ async function downloadInstaller(filename) {
             embed += `chmod +x "$NATIVE_HOST_DIR/launcher.js"\n`;
             embed += `echo "  OK Embedded launcher.js"`;
             content = content.replace('# __EMBEDDED_LAUNCHER_JS__', embed);
+            content = embedCompanionForShell(content, companionB64);
         }
 
         // Download single self-contained installer
         const blob = new Blob([content], { type: 'text/plain' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = filename;
+        a.download = downloadName;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(a.href);
 
         if (status) {
-            status.textContent = `Downloaded ${filename} — run it to complete setup.`;
+            status.textContent = `Downloaded ${downloadName} — run it to complete setup.`;
             setTimeout(() => { status.textContent = ''; }, 6000);
         }
     } catch (e) {
@@ -91,6 +165,30 @@ async function checkBackendStatus() {
 
     const port = document.getElementById('backend-port').value || 8765;
     const checks = [];
+
+    const setup = await new Promise(resolve => {
+        chrome.runtime.sendMessage({ type: 'check-setup' }, (response) => {
+            if (chrome.runtime.lastError) {
+                resolve({ success: false, error: chrome.runtime.lastError.message });
+            } else {
+                resolve(response || { success: false, error: 'No setup response' });
+            }
+        });
+    });
+
+    if (setup.success && setup.diagnostics) {
+        const diag = setup.diagnostics;
+        checks.push({ label: 'Native host', ok: setup.nativeHost });
+        checks.push({ label: 'Backend installed', ok: diag.backendInstalled });
+        checks.push({ label: 'Dependencies installed', ok: diag.dependenciesInstalled });
+        checks.push({ label: 'Extension ID allowed', ok: diag.extensionAllowed });
+    } else {
+        checks.push({
+            label: 'Native host',
+            ok: false,
+            msg: setup.error || 'Run the auto setup installer, then reload the extension'
+        });
+    }
 
     // Check backend server
     try {

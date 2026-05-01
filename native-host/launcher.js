@@ -96,6 +96,38 @@ let appiumProcess = null;
 let activeBackendPort = 8765;
 let activeAppiumPort = 4723;
 
+function getNativeManifestPath() {
+    return path.join(PROJECT_ROOT, 'native-host', 'com.locatorlens.host.json');
+}
+
+function readNativeManifest() {
+    try {
+        return JSON.parse(fs.readFileSync(getNativeManifestPath(), 'utf8'));
+    } catch (e) {
+        return null;
+    }
+}
+
+function diagnoseSetup(extensionId) {
+    const manifest = readNativeManifest();
+    const allowedOrigin = extensionId ? `chrome-extension://${extensionId}/` : null;
+    const launcherPath = path.join(PROJECT_ROOT, 'native-host', 'launcher.js');
+    const packageJsonPath = path.join(PROJECT_ROOT, 'backend', 'package.json');
+    const nodeModulesPath = path.join(PROJECT_ROOT, 'backend', 'node_modules');
+
+    return {
+        backendInstalled: fs.existsSync(BACKEND_SCRIPT) && fs.existsSync(packageJsonPath),
+        dependenciesInstalled: fs.existsSync(nodeModulesPath),
+        launcherInstalled: fs.existsSync(launcherPath),
+        manifestInstalled: !!manifest,
+        extensionAllowed: !!manifest && Array.isArray(manifest.allowed_origins) && allowedOrigin
+            ? manifest.allowed_origins.includes(allowedOrigin)
+            : false,
+        manifestPath: getNativeManifestPath(),
+        backendPath: path.join(PROJECT_ROOT, 'backend')
+    };
+}
+
 // Logging
 function log(message, level = 'info') {
     const timestamp = new Date().toISOString();
@@ -409,6 +441,14 @@ process.stdin.on('readable', () => {
                                 type: 'status',
                                 backend: !!backendProcess,
                                 appium: appiumRunning
+                            });
+                            break;
+
+                        case 'diagnose':
+                            sendMessage({
+                                type: 'diagnose-result',
+                                requestId: msg.requestId,
+                                data: diagnoseSetup(msg.extensionId)
                             });
                             break;
                     }

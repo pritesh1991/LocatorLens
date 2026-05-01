@@ -1,5 +1,5 @@
 // Background service worker for the extension
-console.log('Locator Builder background service initialized');
+console.log('LocatorLens background service initialized');
 
 let nativePort = null;
 let serverStatus = { backend: false, appium: false };
@@ -7,10 +7,12 @@ let logsTabId = null; // Track the logs tab
 let logHistory = []; // Store recent logs for initial load
 const MAX_LOG_HISTORY = 1000;
 let nativeHostAvailable = false; // Track native host availability
+let nativeRequestId = 0;
+const pendingNativeRequests = new Map();
 
 // Connect to Native Host
 function connectToNativeHost() {
-    const hostName = "com.locatorbuilder.host";
+    const hostName = "com.locatorlens.host";
     try {
         nativePort = chrome.runtime.connectNative(hostName);
         nativeHostAvailable = true;
@@ -20,6 +22,11 @@ function connectToNativeHost() {
             if (msg.type === 'status') {
                 serverStatus = { backend: msg.backend, appium: msg.appium };
                 broadcastStatus();
+            } else if (msg.requestId && pendingNativeRequests.has(msg.requestId)) {
+                const { resolve, timeout } = pendingNativeRequests.get(msg.requestId);
+                clearTimeout(timeout);
+                pendingNativeRequests.delete(msg.requestId);
+                resolve(msg);
             } else if (msg.type === 'start-result') {
                 // Check for errors in the start result
                 const hasBackendError = msg.backend && !msg.backend.success;
@@ -95,7 +102,7 @@ function connectToNativeHost() {
 
                 // Provide helpful messages for common errors
                 if (error.includes('Specified native messaging host not found')) {
-                    userMessage = 'Native host not found. Please run install_host.sh (macOS/Linux) or install_host.bat (Windows) to install the native messaging host.';
+                    userMessage = 'Native host not found. Please run the LocatorLens auto setup installer, then reload the extension.';
                     helpNeeded = true;
                 } else if (error.includes('Access to the specified native messaging host is forbidden')) {
                     userMessage = 'Access to the native messaging host is forbidden. Open Options, re-download and re-run the installer, then reload the extension.';
@@ -169,6 +176,24 @@ function broadcastStatus() {
     });
 }
 
+function sendNativeRequest(message, timeoutMs = 3000) {
+    return new Promise((resolve, reject) => {
+        if (!nativePort) {
+            reject(new Error('Native host is not connected'));
+            return;
+        }
+
+        const requestId = ++nativeRequestId;
+        const timeout = setTimeout(() => {
+            pendingNativeRequests.delete(requestId);
+            reject(new Error('Native host did not respond'));
+        }, timeoutMs);
+
+        pendingNativeRequests.set(requestId, { resolve, reject, timeout });
+        nativePort.postMessage({ ...message, requestId });
+    });
+}
+
 // Listen for messages from Popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     console.log('[Background] Received message:', request.type);
@@ -177,6 +202,38 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse(serverStatus);
         // Also trigger a fresh check
         checkStatus();
+    } else if (request.type === 'check-setup') {
+        if (!nativePort) {
+            connectToNativeHost();
+        }
+
+        setTimeout(() => {
+            if (!nativePort) {
+                sendResponse({
+                    success: false,
+                    nativeHost: false,
+                    error: 'Native host not found. Run the LocatorLens auto setup installer, then reload the extension.'
+                });
+                return;
+            }
+
+            sendNativeRequest({ command: 'diagnose', extensionId: chrome.runtime.id })
+                .then((msg) => {
+                    sendResponse({
+                        success: true,
+                        nativeHost: true,
+                        diagnostics: msg.data
+                    });
+                })
+                .catch((error) => {
+                    sendResponse({
+                        success: false,
+                        nativeHost: true,
+                        error: error.message
+                    });
+                });
+        }, 100);
+        return true;
     } else if (request.type === 'start-server') {
         console.log('[Background] Start server requested, nativePort:', nativePort ? 'connected' : 'not connected');
 
@@ -199,7 +256,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         console.error('[Background] Could not connect to native host after waiting');
                         sendResponse({
                             success: false,
-                            error: 'Could not connect to native host. Please run install_host.sh (macOS/Linux) or install_host.bat (Windows) first.'
+                            error: 'Could not connect to native host. Please run the LocatorLens auto setup installer first.'
                         });
                     }
                 }, 100);
@@ -338,7 +395,7 @@ checkNativeHostConnection();
 
 // Listen for extension installation
 chrome.runtime.onInstalled.addListener(() => {
-    console.log('Locator Builder installed');
+    console.log('LocatorLens installed');
     connectToNativeHost();
 });
 

@@ -232,7 +232,7 @@ wss.on('connection', (ws, req) => {
     // Send welcome message
     ws.send(JSON.stringify({
         type: 'connected',
-        message: 'Connected to Locator Builder backend',
+        message: 'Connected to LocatorLens backend',
         clientId
     }));
 });
@@ -374,7 +374,7 @@ wss.on('close', () => {
 server.listen(SERVER_PORT, () => {
     console.log(`
 ╔═══════════════════════════════════════════════════════╗
-║   Locator Builder Backend Server                     ║
+║   LocatorLens Backend Server                         ║
 ╠═══════════════════════════════════════════════════════╣
 ║   HTTP Server: http://localhost:${SERVER_PORT}              ║
 ║   WebSocket:   ws://localhost:${SERVER_PORT}                ║
