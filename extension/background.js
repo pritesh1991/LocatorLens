@@ -238,10 +238,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         console.log('[Background] Start server requested, nativePort:', nativePort ? 'connected' : 'not connected');
 
         // Read settings then send start command
-        chrome.storage.sync.get({ backendPort: 8765, appiumUrl: 'http://localhost:4723' }, (settings) => {
+        chrome.storage.sync.get({ backendPort: 8765, appiumUrl: 'http://localhost:4723', fpsLimit: 3 }, (settings) => {
             let appiumPort = 4723;
             try { appiumPort = parseInt(new URL(settings.appiumUrl).port) || 4723; } catch (e) {}
-            const startCmd = { command: 'start', backendPort: settings.backendPort, appiumPort };
+            const startCmd = {
+                command: 'start',
+                backendPort: settings.backendPort,
+                appiumPort,
+                fpsLimit: normalizeFpsLimit(settings.fpsLimit)
+            };
 
             if (!nativePort) {
                 console.log('[Background] Attempting to connect to native host...');
@@ -296,6 +301,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 function getBackendUrl(port) {
     return `http://localhost:${port || 8765}`;
+}
+
+function normalizeFpsLimit(value, fallback = 3) {
+    const parsed = value === '' || value == null ? NaN : Number(value);
+    if (Number.isFinite(parsed)) {
+        return Math.min(30, Math.max(1, Math.round(parsed)));
+    }
+
+    const parsedFallback = fallback === '' || fallback == null ? NaN : Number(fallback);
+    return Number.isFinite(parsedFallback)
+        ? Math.min(30, Math.max(1, Math.round(parsedFallback)))
+        : 3;
 }
 
 // Handle device connection in background - runs even if popup closes

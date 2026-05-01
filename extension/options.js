@@ -1,11 +1,69 @@
+const DEFAULT_FPS_LIMIT = 3;
+const MIN_FPS_LIMIT = 1;
+const MAX_FPS_LIMIT = 30;
+const DEFAULT_THEME = 'dark';
+
+function normalizeFpsLimit(value, fallback = DEFAULT_FPS_LIMIT) {
+    const parsed = value === '' || value == null ? NaN : Number(value);
+    if (Number.isFinite(parsed)) {
+        return Math.min(MAX_FPS_LIMIT, Math.max(MIN_FPS_LIMIT, Math.round(parsed)));
+    }
+
+    const parsedFallback = fallback === '' || fallback == null ? NaN : Number(fallback);
+    return Number.isFinite(parsedFallback)
+        ? Math.min(MAX_FPS_LIMIT, Math.max(MIN_FPS_LIMIT, Math.round(parsedFallback)))
+        : DEFAULT_FPS_LIMIT;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     loadSettings();
+    loadTheme();
     setupTabs();
+    setupThemeToggle();
     document.getElementById('save-btn').addEventListener('click', saveSettings);
     document.getElementById('download-mac')?.addEventListener('click', () => downloadInstaller('install_host.sh', 'install_locatorlens.sh'));
     document.getElementById('download-windows')?.addEventListener('click', () => downloadInstaller('install_host.bat', 'install_locatorlens.bat'));
     document.getElementById('check-backend-btn')?.addEventListener('click', checkBackendStatus);
+    chrome.storage.onChanged.addListener(handleStorageChange);
 });
+
+function normalizeTheme(theme) {
+    return theme === 'light' ? 'light' : DEFAULT_THEME;
+}
+
+function applyTheme(theme) {
+    const normalizedTheme = normalizeTheme(theme);
+    document.body.classList.toggle('dark-theme', normalizedTheme === 'dark');
+    document.body.classList.toggle('light-theme', normalizedTheme === 'light');
+
+    document.querySelectorAll('.theme-option').forEach(btn => {
+        const isActive = btn.dataset.theme === normalizedTheme;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+}
+
+function loadTheme() {
+    chrome.storage.local.get({ theme: DEFAULT_THEME }, (items) => {
+        applyTheme(items.theme);
+    });
+}
+
+function setupThemeToggle() {
+    document.querySelectorAll('.theme-option').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const theme = normalizeTheme(btn.dataset.theme);
+            applyTheme(theme);
+            chrome.storage.local.set({ theme });
+        });
+    });
+}
+
+function handleStorageChange(changes, areaName) {
+    if (areaName === 'local' && changes.theme) {
+        applyTheme(changes.theme.newValue);
+    }
+}
 
 function setupTabs() {
     const tabBtns = document.querySelectorAll('.tab-btn');
@@ -161,7 +219,7 @@ async function downloadInstaller(filename, downloadName = filename) {
 
 async function checkBackendStatus() {
     const resultEl = document.getElementById('check-result');
-    resultEl.innerHTML = '<span style="color:#64748b;">Checking...</span>';
+    resultEl.innerHTML = '<span style="color: var(--text-secondary);">Checking...</span>';
 
     const port = document.getElementById('backend-port').value || 8765;
     const checks = [];
@@ -208,23 +266,25 @@ async function checkBackendStatus() {
     resultEl.innerHTML = checks.map(c => `
         <div class="status-item">
             <span class="dot ${c.ok ? 'ok' : c.warn ? 'warn' : 'err'}"></span>
-            <span>${c.label}${c.msg ? ` — <span style="color:#64748b">${c.msg}</span>` : ''}</span>
+            <span>${c.label}${c.msg ? ` — <span style="color: var(--text-secondary);">${c.msg}</span>` : ''}</span>
         </div>
     `).join('');
 }
 
 function loadSettings() {
-    chrome.storage.sync.get({ backendPort: 8765, appiumUrl: 'http://localhost:4723', fpsLimit: 3 }, (items) => {
+    chrome.storage.sync.get({ backendPort: 8765, appiumUrl: 'http://localhost:4723', fpsLimit: DEFAULT_FPS_LIMIT }, (items) => {
         document.getElementById('backend-port').value = items.backendPort;
         document.getElementById('appium-url').value = items.appiumUrl;
-        document.getElementById('fps-limit').value = items.fpsLimit;
+        document.getElementById('fps-limit').value = normalizeFpsLimit(items.fpsLimit);
     });
 }
 
 function saveSettings() {
     const backendPort = document.getElementById('backend-port').value;
     const appiumUrl = document.getElementById('appium-url').value;
-    const fpsLimit = document.getElementById('fps-limit').value;
+    const fpsInput = document.getElementById('fps-limit');
+    const fpsLimit = normalizeFpsLimit(fpsInput.value);
+    fpsInput.value = fpsLimit;
 
     chrome.storage.sync.set({ backendPort, appiumUrl, fpsLimit }, () => {
         const btn = document.getElementById('save-btn');

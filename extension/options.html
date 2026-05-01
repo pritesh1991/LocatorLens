@@ -6,24 +6,79 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LocatorLens – Setup & Settings</title>
     <style>
+        :root {
+            color-scheme: light;
+            --page-bg: #f8fafc;
+            --surface: #ffffff;
+            --surface-muted: #f8fafc;
+            --surface-subtle: #f1f5f9;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --text-strong: #0f172a;
+            --border: #e2e8f0;
+            --border-subtle: #f1f5f9;
+            --border-strong: #d1d5db;
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --primary-soft: #eef2ff;
+            --alert-bg: #fffbeb;
+            --alert-border: #fcd34d;
+            --alert-strong: #92400e;
+            --alert-text: #78350f;
+            --code-bg: #f1f5f9;
+            --code-text: #0f172a;
+            --pre-bg: #0f172a;
+            --pre-text: #e2e8f0;
+            --success: #059669;
+            --status-muted: #d1d5db;
+        }
+
+        body.dark-theme {
+            color-scheme: dark;
+            --page-bg: #0f172a;
+            --surface: #111827;
+            --surface-muted: #1f2937;
+            --surface-subtle: #172033;
+            --text-primary: #e5e7eb;
+            --text-secondary: #9ca3af;
+            --text-strong: #f8fafc;
+            --border: #2b3648;
+            --border-subtle: #233044;
+            --border-strong: #4b5563;
+            --primary: #6366f1;
+            --primary-hover: #818cf8;
+            --primary-soft: rgba(129, 140, 248, 0.14);
+            --alert-bg: #2a1f0d;
+            --alert-border: #854d0e;
+            --alert-strong: #fbbf24;
+            --alert-text: #f8d48b;
+            --code-bg: #1f2937;
+            --code-text: #f8fafc;
+            --pre-bg: #020617;
+            --pre-text: #e5e7eb;
+            --success: #34d399;
+            --status-muted: #4b5563;
+        }
+
         * { box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             padding: 24px;
             max-width: 700px;
             margin: 0 auto;
-            background: #f8fafc;
-            color: #1e293b;
+            background: var(--page-bg);
+            color: var(--text-primary);
             font-size: 14px;
             line-height: 1.6;
         }
         h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
-        .subtitle { color: #64748b; margin-bottom: 24px; }
+        .subtitle { color: var(--text-secondary); margin-bottom: 24px; }
         h2 { font-size: 15px; font-weight: 600; margin: 0 0 14px; }
+        a { color: var(--primary); }
 
         .card {
-            background: white;
-            border: 1px solid #e2e8f0;
+            background: var(--surface);
+            border: 1px solid var(--border);
             border-radius: 10px;
             padding: 20px 24px;
             margin-bottom: 20px;
@@ -39,7 +94,7 @@
         }
         .step-list li::before {
             content: counter(step);
-            background: #4f46e5;
+            background: var(--primary);
             color: white;
             border-radius: 50%;
             width: 24px;
@@ -56,21 +111,21 @@
         .step-content strong { display: block; margin-bottom: 4px; }
 
         .alert {
-            background: #fffbeb;
-            border: 1px solid #fcd34d;
+            background: var(--alert-bg);
+            border: 1px solid var(--alert-border);
             border-radius: 8px;
             padding: 14px 16px;
             margin-bottom: 20px;
         }
-        .alert strong { color: #92400e; display: block; margin-bottom: 6px; }
-        .alert p { color: #78350f; margin: 0; }
+        .alert strong { color: var(--alert-strong); display: block; margin-bottom: 6px; }
+        .alert p { color: var(--alert-text); margin: 0; }
 
         .download-group { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0 6px; }
         .btn {
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            background: #4f46e5;
+            background: var(--primary);
             color: white;
             border: none;
             padding: 9px 16px;
@@ -80,30 +135,30 @@
             font-size: 13px;
             text-decoration: none;
         }
-        .btn:hover { background: #4338ca; }
+        .btn:hover { background: var(--primary-hover); }
         .btn-secondary {
-            background: white;
-            color: #4f46e5;
-            border: 1.5px solid #4f46e5;
+            background: var(--surface);
+            color: var(--primary);
+            border: 1.5px solid var(--primary);
         }
-        .btn-secondary:hover { background: #eef2ff; }
+        .btn-secondary:hover { background: var(--primary-soft); }
         .btn-save {
             margin-top: 16px;
             padding: 10px 24px;
         }
 
         code {
-            background: #f1f5f9;
-            border: 1px solid #e2e8f0;
+            background: var(--code-bg);
+            border: 1px solid var(--border);
             padding: 2px 7px;
             border-radius: 4px;
             font-family: 'SF Mono', 'Fira Code', monospace;
             font-size: 12px;
-            color: #0f172a;
+            color: var(--code-text);
         }
         pre {
-            background: #0f172a;
-            color: #e2e8f0;
+            background: var(--pre-bg);
+            color: var(--pre-text);
             padding: 14px 16px;
             border-radius: 8px;
             overflow-x: auto;
@@ -119,64 +174,101 @@
 
         .platform-tabs { display: flex; gap: 4px; margin-bottom: 14px; }
         .tab-btn {
-            background: #f1f5f9;
-            border: 1px solid #e2e8f0;
+            background: var(--surface-subtle);
+            border: 1px solid var(--border);
             border-radius: 6px;
             padding: 6px 14px;
             cursor: pointer;
             font-size: 13px;
             font-weight: 500;
-            color: #475569;
+            color: var(--text-secondary);
         }
         .tab-btn.active {
-            background: #4f46e5;
+            background: var(--primary);
             color: white;
-            border-color: #4f46e5;
+            border-color: var(--primary);
         }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
 
         .prereq-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .prereq-item {
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
+            background: var(--surface-muted);
+            border: 1px solid var(--border);
             border-radius: 8px;
             padding: 12px 14px;
         }
         .prereq-item strong { display: block; margin-bottom: 4px; font-size: 13px; }
-        .prereq-item span { color: #64748b; font-size: 12px; }
+        .prereq-item span { color: var(--text-secondary); font-size: 12px; }
 
         .setting-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
             padding: 10px 0;
-            border-bottom: 1px solid #f1f5f9;
+            border-bottom: 1px solid var(--border-subtle);
+            gap: 18px;
         }
         .setting-row:last-of-type { border-bottom: none; }
-        .setting-row label { font-weight: 500; }
+        .setting-row label,
+        .setting-label { font-weight: 500; }
         input[type="text"], input[type="number"] {
             padding: 7px 10px;
-            border: 1px solid #d1d5db;
+            border: 1px solid var(--border-strong);
             border-radius: 6px;
             width: 220px;
             font-size: 13px;
+            background: var(--surface);
+            color: var(--text-primary);
+        }
+        input[type="text"]:focus, input[type="number"]:focus {
+            border-color: var(--primary);
+            outline: none;
+            box-shadow: 0 0 0 3px var(--primary-soft);
+        }
+        .theme-toggle {
+            display: inline-flex;
+            gap: 2px;
+            padding: 3px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--surface-subtle);
+        }
+        .theme-option {
+            min-width: 64px;
+            border: none;
+            border-radius: 6px;
+            padding: 6px 12px;
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .theme-option.active {
+            background: var(--primary);
+            color: white;
+        }
+        .theme-option:focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: 2px;
         }
 
-        #download-status { font-size: 12px; color: #059669; margin-top: 6px; }
+        #download-status { font-size: 12px; color: var(--success); margin-top: 6px; }
         .check-status { margin-top: 14px; }
         #check-result { margin-top: 10px; font-size: 13px; }
         .status-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
-        .dot { width: 8px; height: 8px; border-radius: 50%; background: #d1d5db; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--status-muted); }
         .dot.ok { background: #10b981; }
         .dot.warn { background: #f59e0b; }
         .dot.err { background: #ef4444; }
+        .muted { color: var(--text-secondary); }
 
         @media (max-width: 500px) { .prereq-grid { grid-template-columns: 1fr; } }
     </style>
 </head>
 
-<body>
+<body class="dark-theme">
     <h1>LocatorLens</h1>
     <p class="subtitle">Real-time Element Inspector &amp; Locator Generator for Appium</p>
 
@@ -231,7 +323,7 @@
             <li>
                 <div class="step-content">
                     <strong>Download &amp; Run the Auto Setup Installer</strong>
-                    <p style="color:#64748b; margin: 4px 0 10px;">This downloads the LocatorLens companion, installs the local backend, and registers the native helper.</p>
+                    <p style="color: var(--text-secondary); margin: 4px 0 10px;">This downloads the LocatorLens companion, installs the local backend, and registers the native helper.</p>
 
                     <div class="platform-tabs">
                         <button class="tab-btn active" data-tab="mac">macOS / Linux</button>
@@ -242,7 +334,7 @@
                         <div class="download-group">
                             <button class="btn" id="download-mac">Download Auto Setup</button>
                         </div>
-                        <p style="color:#64748b; margin: 6px 0 4px;">Then open Terminal and run:</p>
+                        <p style="color: var(--text-secondary); margin: 6px 0 4px;">Then open Terminal and run:</p>
                         <pre><code>cd ~/Downloads
 bash install_locatorlens.sh</code></pre>
                     </div>
@@ -251,7 +343,7 @@ bash install_locatorlens.sh</code></pre>
                         <div class="download-group">
                             <button class="btn" id="download-windows">Download Auto Setup</button>
                         </div>
-                        <p style="color:#64748b; margin: 6px 0 4px;">Then open Command Prompt and run:</p>
+                        <p style="color: var(--text-secondary); margin: 6px 0 4px;">Then open Command Prompt and run:</p>
                         <pre><code>cd %USERPROFILE%\Downloads
 install_locatorlens.bat</code></pre>
                     </div>
@@ -263,14 +355,14 @@ install_locatorlens.bat</code></pre>
             <li>
                 <div class="step-content">
                     <strong>Reload the Extension</strong>
-                    <p style="color:#64748b; margin: 4px 0;">Go to <code>chrome://extensions</code>, find LocatorLens, and click the reload icon.</p>
+                    <p style="color: var(--text-secondary); margin: 4px 0;">Go to <code>chrome://extensions</code>, find LocatorLens, and click the reload icon.</p>
                 </div>
             </li>
 
             <li>
                 <div class="step-content">
                     <strong>Connect Your Device</strong>
-                    <p style="color:#64748b; margin: 4px 0;">Click the LocatorLens icon &rarr; Start Servers &rarr; Select Platform &rarr; Select Device &rarr; Connect.</p>
+                    <p style="color: var(--text-secondary); margin: 4px 0;">Click the LocatorLens icon &rarr; Start Servers &rarr; Select Platform &rarr; Select Device &rarr; Connect.</p>
                 </div>
             </li>
         </ul>
@@ -294,7 +386,14 @@ install_locatorlens.bat</code></pre>
         </div>
         <div class="setting-row">
             <label for="fps-limit">Screen Mirror FPS</label>
-            <input type="number" id="fps-limit" value="3" min="1" max="30">
+            <input type="number" id="fps-limit" value="3" min="1" max="30" step="1">
+        </div>
+        <div class="setting-row">
+            <span id="theme-label" class="setting-label">Theme</span>
+            <div class="theme-toggle" role="group" aria-labelledby="theme-label">
+                <button type="button" class="theme-option active" data-theme="dark" aria-pressed="true">Dark</button>
+                <button type="button" class="theme-option" data-theme="light" aria-pressed="false">Light</button>
+            </div>
         </div>
         <button class="btn btn-save" id="save-btn">Save Settings</button>
     </div>
@@ -304,25 +403,25 @@ install_locatorlens.bat</code></pre>
         <h2>Troubleshooting</h2>
         <table style="width:100%; border-collapse:collapse; font-size:13px;">
             <thead>
-                <tr style="border-bottom: 1px solid #e2e8f0;">
-                    <th style="text-align:left; padding:8px 0; color:#64748b; font-weight:600;">Issue</th>
-                    <th style="text-align:left; padding:8px 0; color:#64748b; font-weight:600;">Solution</th>
+                <tr style="border-bottom: 1px solid var(--border);">
+                    <th style="text-align:left; padding:8px 0; color: var(--text-secondary); font-weight:600;">Issue</th>
+                    <th style="text-align:left; padding:8px 0; color: var(--text-secondary); font-weight:600;">Solution</th>
                 </tr>
             </thead>
             <tbody>
-                <tr style="border-bottom: 1px solid #f1f5f9;">
+                <tr style="border-bottom: 1px solid var(--border-subtle);">
                     <td style="padding:8px 0; padding-right:16px;">"Native messaging host not found"</td>
                     <td style="padding:8px 0;">Re-run the auto setup installer and reload extension</td>
                 </tr>
-                <tr style="border-bottom: 1px solid #f1f5f9;">
+                <tr style="border-bottom: 1px solid var(--border-subtle);">
                     <td style="padding:8px 0; padding-right:16px;">Servers won't start</td>
                     <td style="padding:8px 0;">Check logs in extension popup. Ensure Node.js is installed.</td>
                 </tr>
-                <tr style="border-bottom: 1px solid #f1f5f9;">
+                <tr style="border-bottom: 1px solid var(--border-subtle);">
                     <td style="padding:8px 0; padding-right:16px;">Appium not found</td>
                     <td style="padding:8px 0;"><code>npm install -g appium</code></td>
                 </tr>
-                <tr style="border-bottom: 1px solid #f1f5f9;">
+                <tr style="border-bottom: 1px solid var(--border-subtle);">
                     <td style="padding:8px 0; padding-right:16px;">No Android devices</td>
                     <td style="padding:8px 0;">Check <code>adb devices</code> in terminal. Enable USB debugging.</td>
                 </tr>
@@ -332,7 +431,7 @@ install_locatorlens.bat</code></pre>
                 </tr>
             </tbody>
         </table>
-        <p style="margin-top: 14px; color: #64748b; font-size: 13px;">
+        <p style="margin-top: 14px; color: var(--text-secondary); font-size: 13px;">
             Logs saved to: <code>~/.locatorlens/native-host.log</code>
         </p>
     </div>

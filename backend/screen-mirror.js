@@ -1,6 +1,7 @@
 const { spawn, exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { normalizeScreenFps } = require('./fps');
 
 const CAPTURE_TIMEOUT = 10000; // 10 second timeout per screenshot
 const MAX_CONSECUTIVE_ERRORS = 10; // Stop streaming after this many consecutive failures
@@ -146,15 +147,17 @@ class ScreenMirror {
     startStreaming(platform, deviceId, callback, fps = 3) {
         // Stop any existing stream for THIS device only
         this.stopStreamingForDevice(deviceId);
+        const streamFps = normalizeScreenFps(fps);
 
         const state = {
             isCapturing: false,
             platform,
             interval: null,
-            errorCount: 0
+            errorCount: 0,
+            fps: streamFps
         };
 
-        const interval = 1000 / fps;
+        const interval = Math.max(1, Math.round(1000 / streamFps));
 
         state.interval = setInterval(async () => {
             if (state.isCapturing) return; // Skip frame if previous one is still processing
@@ -184,7 +187,7 @@ class ScreenMirror {
         }, interval);
 
         this.streams.set(deviceId, state);
-        console.log(`Started screen streaming for ${deviceId} at ${fps} FPS (Total active: ${this.streams.size})`);
+        console.log(`Started screen streaming for ${deviceId} at ${streamFps} FPS (Total active: ${this.streams.size})`);
     }
 
     /**
@@ -223,4 +226,3 @@ class ScreenMirror {
 }
 
 module.exports = new ScreenMirror();
-
