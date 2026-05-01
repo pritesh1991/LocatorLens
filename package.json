@@ -6,7 +6,10 @@
         "backend": "cd backend && npm start",
         "backend:dev": "cd backend && npm run dev",
         "install:backend": "cd backend && npm install",
-        "install:all": "npm run install:backend"
+        "install:all": "npm run install:backend",
+        "package:extension": "npm run build:companion && node -e \"require('fs').rmSync('locatorlens-extension.zip',{force:true})\" && cd extension && zip -r ../locatorlens-extension.zip . -x '*.DS_Store' -x '__MACOSX/*'",
+        "prepare:store-assets": "node scripts/prepare-store-assets.js",
+        "build:companion": "node scripts/build-companion-release.js"
     },
     "keywords": [
         "appium",

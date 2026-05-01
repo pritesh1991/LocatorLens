@@ -178,7 +178,7 @@
 
 <body>
     <h1>LocatorLens</h1>
-    <p class="subtitle">Real-time Element Inspector &amp; Locator Builder for Appium</p>
+    <p class="subtitle">Real-time Element Inspector &amp; Locator Generator for Appium</p>
 
     <!-- Setup Required Banner -->
     <div class="alert">
@@ -230,8 +230,8 @@
 
             <li>
                 <div class="step-content">
-                    <strong>Download &amp; Run the Native Host Installer</strong>
-                    <p style="color:#64748b; margin: 4px 0 10px;">This registers a helper that lets the extension start servers.</p>
+                    <strong>Download &amp; Run the Auto Setup Installer</strong>
+                    <p style="color:#64748b; margin: 4px 0 10px;">This downloads the LocatorLens companion, installs the local backend, and registers the native helper.</p>
 
                     <div class="platform-tabs">
                         <button class="tab-btn active" data-tab="mac">macOS / Linux</button>
@@ -240,20 +240,20 @@
 
                     <div id="tab-mac" class="tab-content active">
                         <div class="download-group">
-                            <button class="btn" id="download-mac">Download Installer</button>
+                            <button class="btn" id="download-mac">Download Auto Setup</button>
                         </div>
                         <p style="color:#64748b; margin: 6px 0 4px;">Then open Terminal and run:</p>
                         <pre><code>cd ~/Downloads
-bash install_host.sh</code></pre>
+bash install_locatorlens.sh</code></pre>
                     </div>
 
                     <div id="tab-windows" class="tab-content">
                         <div class="download-group">
-                            <button class="btn" id="download-windows">Download Installer</button>
+                            <button class="btn" id="download-windows">Download Auto Setup</button>
                         </div>
                         <p style="color:#64748b; margin: 6px 0 4px;">Then open Command Prompt and run:</p>
                         <pre><code>cd %USERPROFILE%\Downloads
-install_host.bat</code></pre>
+install_locatorlens.bat</code></pre>
                     </div>
 
                     <div id="download-status"></div>
@@ -276,7 +276,7 @@ install_host.bat</code></pre>
         </ul>
 
         <div class="check-status">
-            <button class="btn btn-secondary" id="check-backend-btn">Check Backend Status</button>
+            <button class="btn btn-secondary" id="check-backend-btn">Check Setup Status</button>
             <div id="check-result"></div>
         </div>
     </div>
@@ -312,7 +312,7 @@ install_host.bat</code></pre>
             <tbody>
                 <tr style="border-bottom: 1px solid #f1f5f9;">
                     <td style="padding:8px 0; padding-right:16px;">"Native messaging host not found"</td>
-                    <td style="padding:8px 0;">Re-run install_host.sh and reload extension</td>
+                    <td style="padding:8px 0;">Re-run the auto setup installer and reload extension</td>
                 </tr>
                 <tr style="border-bottom: 1px solid #f1f5f9;">
                     <td style="padding:8px 0; padding-right:16px;">Servers won't start</td>

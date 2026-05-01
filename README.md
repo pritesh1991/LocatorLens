@@ -1,6 +1,6 @@
 <h1><img src="extension/icons/icon128.png" width="32" height="32" align="absmiddle"> LocatorLens</h1>
 
-**Real-time Element Inspector & Locator Builder for Appium (Android & iOS)**
+**Real-time Element Inspector & Locator Generator for Appium (Android & iOS)**
 
 Inspect mobile app elements, generate locators, and see a live screen mirror — all from your browser. Works with **any app on any device**, no code changes or app modifications required.
 
@@ -24,7 +24,7 @@ Inspect mobile app elements, generate locators, and see a live screen mirror —
 - [How It Works](#how-it-works)
 - [Settings](#settings)
 - [Platform Support](#platform-support)
-- [LocatorLens vs Appium Inspector](#locatorlens-vs-appium-inspector)
+- [LocatorLens and Appium Inspector Workflows](#locatorlens-and-appium-inspector-workflows)
 - [Troubleshooting](#troubleshooting)
 - [Project Structure](#project-structure)
 - [License](#license)
@@ -81,7 +81,7 @@ Inspect any foreground app, view the live screen mirror, browse the element tree
 
 1. **Install prerequisites** — Node.js 18+, Appium 2.x, and the relevant driver (see [Prerequisites](#prerequisites))
 2. **Install the extension** — from the Chrome Web Store or load unpacked (see [Installation](#installation))
-3. **Run the native host installer** — from the extension's Settings page
+3. **Run the auto setup installer** — from the extension's Settings page
 4. **Connect your device** — start your Android device (USB debugging on) or boot an iOS simulator
 5. **Click the extension icon** → **Start Servers** → select platform and device → **Connect**
 6. **Start inspecting** — click any element on the screen mirror to see all its locators
@@ -107,9 +107,9 @@ That's it. Open any app on your device and keep inspecting — no reconnection n
 
 ### Option 1 — Chrome Web Store (Recommended)
 
-1. Install **LocatorLens** from the [Chrome Web Store](#) *(coming soon)*
+1. Install **LocatorLens** from the Chrome Web Store after the listing is approved
 2. Click the extension icon → **Settings**
-3. Follow the **Setup Guide** on the settings page — it walks you through the native host install
+3. Follow the **Setup Guide** on the settings page — it downloads the auto setup installer and registers the local companion
 
 ### Option 2 — Load Unpacked (Developers)
 
@@ -128,15 +128,37 @@ Then load the extension in Chrome:
 2. Enable **Developer Mode** (top right)
 3. Click **Load Unpacked** → select the `/extension` folder
 
-Then install the native host:
+Then install the local companion from the extension itself:
+
+1. Open the loaded LocatorLens extension's **Settings** page
+2. Download the auto setup installer for your platform
+3. Run the downloaded installer, then reload the extension
+
+The Settings-page installer bakes in your actual unpacked extension ID. If you run the repository installer directly, pass your extension ID explicitly:
 
 ```bash
 # macOS / Linux
-bash extension/installers/install_host.sh
+bash extension/installers/install_host.sh --extension-id <your-extension-id>
 
-# Windows (Command Prompt — not PowerShell)
-extension\installers\install_host.bat
+# Windows (Command Prompt)
+extension\installers\install_host.bat --extension-id <your-extension-id>
 ```
+
+### Build the Chrome Web Store Package
+
+```bash
+# Generate Chrome Web Store screenshot and promo assets
+npm run prepare:store-assets
+
+# Build dist/locatorlens-companion-v1.0.0.zip, copy it into extension/installers/,
+# and update installer checksum metadata
+npm run build:companion
+
+# Create locatorlens-extension.zip for upload
+npm run package:extension
+```
+
+The Chrome Web Store upload ZIP is `locatorlens-extension.zip`; upload that file, not `extension.crx`. The Options-page installer embeds the companion archive from the extension package, so setup does not depend on a GitHub release being public. If you want a public release URL as a fallback, build with `LOCATORLENS_COMPANION_URL=<public asset URL> npm run build:companion`.
 
 ---
 
@@ -189,11 +211,11 @@ Settings take effect on the next **Start Servers**.
 
 ---
 
-## LocatorLens vs Appium Inspector
+## LocatorLens and Appium Inspector Workflows
 
-The [Appium Inspector](https://github.com/appium/appium-inspector) is the official desktop tool. LocatorLens is a browser extension that takes a fundamentally different approach.
+LocatorLens is built for Appium-based workflows and is inspired by the fast visual feedback people expect from inspector tools like Appium Inspector. LocatorLens is an independent Chrome extension and is not affiliated with or endorsed by the Appium project.
 
-| Feature | LocatorLens | Appium Inspector |
+| Feature | LocatorLens | Appium Inspector / Desktop Inspector Workflow |
 |---------|:-----------:|:----------------:|
 | **Distribution** | Chrome Extension — no install, auto-updates | Desktop app — manual download & updates |
 | **Startup** | One click | Manual: start Appium, configure capabilities, create session |
@@ -206,9 +228,9 @@ The [Appium Inspector](https://github.com/appium/appium-inspector) is the offici
 | **Interact mode** | ✅ Tap from browser | Separate panel |
 | **App switching** | ✅ Any app, no reconfiguration | New session required |
 | **Log viewer** | ✅ Built-in with filtering | Separate terminal |
-| **Dark / light theme** | ✅ | ❌ Fixed |
+| **Dark / light theme** | ✅ | Varies by tool |
 
-**When to use Appium Inspector:** Deep session configuration, remote Appium grids, advanced capability tweaking.
+**When to use Appium Inspector or desktop inspector tools:** Deep session configuration, remote automation grids, advanced capability tweaking.
 
 **When to use LocatorLens:** Day-to-day locator building, exploratory testing, fast iteration.
 
@@ -251,7 +273,7 @@ locatorlens/
 │   ├── inspector/
 │   ├── options.html / options.js
 │   ├── logs.html / logs.js
-│   └── installers/             # install_host.sh, install_host.bat, launcher.js
+│   └── installers/             # auto setup installers + companion metadata
 ├── native-host/                # Native messaging host
 │   └── launcher.js
 └── README.md

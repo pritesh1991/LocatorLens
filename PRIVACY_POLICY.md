@@ -10,16 +10,21 @@ This extension communicates with a local backend server running on your computer
 - Start and stop local Appium and backend servers
 - Retrieve device information from your local system
 - Facilitate mobile app inspection through your local Appium installation
+- Capture local mobile device screenshots and page source XML for inspection
+- Send tap coordinates to your local Appium session when you use interact mode
 
 No data from these communications is transmitted to external servers or third parties.
 
 Permissions Explained
 - storage: Saves your local preferences (server port, Appium URL, FPS settings)
 - nativeMessaging: Communicates with the local Node.js backend on your computer
-- host_permissions (localhost): Connects to your local backend server (configurable port, default 8765)
+- host_permissions (localhost / 127.0.0.1): Connects to your local backend server (configurable port, default 8765)
 
 Data Storage
-Any settings you configure are stored locally in your browser using Chrome's storage API and never leave your device.
+Any settings you configure are stored locally in your browser using Chrome's storage API and never leave your device. LocatorLens keeps active device/session state locally while the backend is running.
+
+Local Logs
+LocatorLens writes local native host and server logs to help troubleshoot setup issues. These logs remain on your computer and are not uploaded by LocatorLens.
 
 Third-Party Services
 LocatorLens does not integrate with any third-party analytics, tracking, or advertising services.

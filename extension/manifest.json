@@ -2,7 +2,7 @@
     "manifest_version": 3,
     "name": "LocatorLens",
     "version": "1.0.0",
-    "description": "Real-time Element Inspector & Locator Builder for Appium (Android & iOS). See app structure, build locators instantly.",
+    "description": "Real-time Element Inspector & Locator Generator for Appium (Android & iOS). See app structure, build locators instantly.",
     "permissions": [
         "storage",
         "nativeMessaging"
@@ -35,6 +35,8 @@
             "resources": [
                 "installers/install_host.sh",
                 "installers/install_host.bat",
+                "installers/companion-release.json",
+                "installers/*.zip",
                 "installers/launcher.js"
             ],
             "matches": [
