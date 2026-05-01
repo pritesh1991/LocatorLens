@@ -8,6 +8,21 @@ const { spawn, execSync } = require('child_process');
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const BACKEND_SCRIPT = path.join(PROJECT_ROOT, 'backend', 'server.js');
 const LOG_FILE = path.join(PROJECT_ROOT, 'native-host.log');
+const DEFAULT_SCREEN_FPS = 3;
+const MIN_SCREEN_FPS = 1;
+const MAX_SCREEN_FPS = 30;
+
+function normalizeScreenFps(value, fallback = DEFAULT_SCREEN_FPS) {
+    const parsed = value === '' || value == null ? NaN : Number(value);
+    if (Number.isFinite(parsed)) {
+        return Math.min(MAX_SCREEN_FPS, Math.max(MIN_SCREEN_FPS, Math.round(parsed)));
+    }
+
+    const parsedFallback = fallback === '' || fallback == null ? NaN : Number(fallback);
+    return Number.isFinite(parsedFallback)
+        ? Math.min(MAX_SCREEN_FPS, Math.max(MIN_SCREEN_FPS, Math.round(parsedFallback)))
+        : DEFAULT_SCREEN_FPS;
+}
 
 // Auto-detect paths
 function findAndroidSDK() {
@@ -95,6 +110,7 @@ let backendProcess = null;
 let appiumProcess = null;
 let activeBackendPort = 8765;
 let activeAppiumPort = 4723;
+let activeScreenFps = DEFAULT_SCREEN_FPS;
 
 function getNativeManifestPath() {
     return path.join(PROJECT_ROOT, 'native-host', 'com.locatorlens.host.json');
@@ -181,25 +197,28 @@ function killPortProcess(port) {
 }
 
 // Start Backend Server
-function startBackend(backendPort, appiumPort) {
+function startBackend(backendPort, appiumPort, fpsLimit) {
     if (backendProcess) {
-        return { success: true, message: 'Backend already running', pid: backendProcess.pid };
+        return { success: true, message: 'Backend already running', pid: backendProcess.pid, fps: activeScreenFps };
     }
 
     const port = backendPort || 8765;
     const aPort = appiumPort || 4723;
+    const screenFps = normalizeScreenFps(fpsLimit);
     activeBackendPort = port;
+    activeScreenFps = screenFps;
 
     try {
         // Check if something is already on the backend port
         killPortProcess(port);
 
-        log(`Starting Backend Server on port ${port} (Appium port: ${aPort})...`);
+        log(`Starting Backend Server on port ${port} (Appium port: ${aPort}, screen FPS: ${screenFps})...`);
         const backendEnv = {
             ...SPAWN_ENV,
             PORT: String(port),
             APPIUM_PORT: String(aPort),
-            APPIUM_HOST: 'localhost'
+            APPIUM_HOST: 'localhost',
+            SCREEN_FPS: String(screenFps)
         };
         backendProcess = spawn(NODE_PATH, [BACKEND_SCRIPT], {
             cwd: PROJECT_ROOT,
@@ -413,7 +432,7 @@ process.stdin.on('readable', () => {
 
                     switch (msg.command) {
                         case 'start':
-                            const backendRes = startBackend(msg.backendPort, msg.appiumPort);
+                            const backendRes = startBackend(msg.backendPort, msg.appiumPort, msg.fpsLimit);
                             const appiumRes = startAppium(msg.appiumPort);
                             sendMessage({
                                 type: 'start-result',

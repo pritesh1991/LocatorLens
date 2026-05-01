@@ -6,6 +6,7 @@ const deviceManager = require('./device-manager');
 const appiumClient = require('./appium-client');
 const screenMirror = require('./screen-mirror');
 const { SERVER_PORT, SCREEN_CAPTURE_FPS, WS_HEARTBEAT_INTERVAL } = require('./config');
+const { normalizeScreenFps } = require('./fps');
 
 const app = express();
 const server = http.createServer(app);
@@ -241,6 +242,7 @@ wss.on('connection', (ws, req) => {
 
 async function handleStartStreaming(ws, data) {
     const { platform, deviceId, fps } = data;
+    const streamFps = normalizeScreenFps(fps, SCREEN_CAPTURE_FPS);
 
     if (!platform || !deviceId) {
         ws.send(JSON.stringify({
@@ -263,12 +265,12 @@ async function handleStartStreaming(ws, data) {
                     ws.send(JSON.stringify({ ...update, deviceId }));
                 }
             },
-            fps || SCREEN_CAPTURE_FPS
+            streamFps
         );
 
         ws.send(JSON.stringify({
             type: 'streaming-started',
-            fps: fps || SCREEN_CAPTURE_FPS,
+            fps: streamFps,
             deviceId
         }));
     } catch (error) {

@@ -1,6 +1,11 @@
 let BACKEND_URL = 'http://localhost:8765';
 let WS_URL = 'ws://localhost:8765';
 
+const DEFAULT_FPS_LIMIT = 3;
+const MIN_FPS_LIMIT = 1;
+const MAX_FPS_LIMIT = 30;
+const DEFAULT_THEME = 'dark';
+
 // Reconnection config
 const WS_RECONNECT_BASE_DELAY = 1000; // Start at 1 second
 const WS_RECONNECT_MAX_DELAY = 30000; // Max 30 seconds
@@ -23,6 +28,7 @@ let nodeIdCounter = 0; // Counter for generating unique node IDs
 let wsReconnectAttempts = 0;
 let wsReconnectTimer = null;
 let wsIntentionalClose = false; // Track if we closed on purpose
+let currentStreamFps = null;
 
 // DOM Elements
 const deviceNameEl = document.getElementById('device-name');
@@ -56,28 +62,34 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function loadTheme() {
-    const storage = await chrome.storage.local.get('theme');
-    const theme = storage.theme || 'dark';
-
-    if (theme === 'light') {
-        document.body.classList.add('light-theme');
-        moonIcon.style.display = 'none';
-        sunIcon.style.display = 'block';
-    }
+    const storage = await chrome.storage.local.get({ theme: DEFAULT_THEME });
+    applyTheme(storage.theme);
 }
 
-function toggleTheme() {
-    const isLight = document.body.classList.toggle('light-theme');
+function normalizeTheme(theme) {
+    return theme === 'light' ? 'light' : DEFAULT_THEME;
+}
+
+function applyTheme(theme) {
+    const normalizedTheme = normalizeTheme(theme);
+    const isLight = normalizedTheme === 'light';
+
+    document.body.classList.toggle('light-theme', isLight);
 
     if (isLight) {
         moonIcon.style.display = 'none';
         sunIcon.style.display = 'block';
-        chrome.storage.local.set({ theme: 'light' });
     } else {
         moonIcon.style.display = 'block';
         sunIcon.style.display = 'none';
-        chrome.storage.local.set({ theme: 'dark' });
     }
+}
+
+function toggleTheme() {
+    const theme = document.body.classList.contains('light-theme') ? 'dark' : 'light';
+
+    applyTheme(theme);
+    chrome.storage.local.set({ theme });
 }
 
 async function loadSession() {
@@ -106,6 +118,7 @@ function setupEventListeners() {
     });
     disconnectBtn.addEventListener('click', disconnect);
     searchInput.addEventListener('input', handleSearch);
+    chrome.storage.onChanged.addListener(handleSettingsChange);
 
     // Add click-to-inspect on screen mirror
     screenImage.addEventListener('click', handleScreenClick);
@@ -235,7 +248,8 @@ function handleWebSocketMessage(message) {
             break;
 
         case 'streaming-started':
-            console.log(`Streaming started at ${message.fps} FPS`);
+            currentStreamFps = normalizeFpsLimit(message.fps, currentStreamFps || DEFAULT_FPS_LIMIT);
+            console.log(`Streaming started at ${currentStreamFps} FPS`);
             // Safe to request page source now — ws.deviceId is set on the server
             refreshPageSource();
             break;
@@ -254,19 +268,58 @@ function handleWebSocketMessage(message) {
     }
 }
 
-function startStreaming() {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+async function startStreaming(fpsOverride = null) {
+    if (!ws || ws.readyState !== WebSocket.OPEN || !sessionInfo?.device) return;
 
-    chrome.storage.sync.get({ fpsLimit: 3 }, (settings) => {
-        ws.send(JSON.stringify({
-            type: 'start-streaming',
-            platform: sessionInfo.device.platform,
-            deviceId: sessionInfo.device.id,
-            fps: settings.fpsLimit
-        }));
-    });
+    const fps = fpsOverride == null
+        ? await getSavedFpsLimit()
+        : normalizeFpsLimit(fpsOverride, currentStreamFps || DEFAULT_FPS_LIMIT);
+
+    if (!ws || ws.readyState !== WebSocket.OPEN || !sessionInfo?.device) return;
+
+    currentStreamFps = fps;
+    fpsCounter = 0;
+    lastFpsUpdate = Date.now();
+
+    ws.send(JSON.stringify({
+        type: 'start-streaming',
+        platform: sessionInfo.device.platform,
+        deviceId: sessionInfo.device.id,
+        fps
+    }));
     // Page source is requested when 'streaming-started' is received,
     // ensuring ws.deviceId is set on the server before we ask for it.
+}
+
+async function getSavedFpsLimit() {
+    const settings = await chrome.storage.sync.get({ fpsLimit: DEFAULT_FPS_LIMIT });
+    return normalizeFpsLimit(settings.fpsLimit);
+}
+
+function normalizeFpsLimit(value, fallback = DEFAULT_FPS_LIMIT) {
+    const parsed = value === '' || value == null ? NaN : Number(value);
+    if (Number.isFinite(parsed)) {
+        return Math.min(MAX_FPS_LIMIT, Math.max(MIN_FPS_LIMIT, Math.round(parsed)));
+    }
+
+    const parsedFallback = fallback === '' || fallback == null ? NaN : Number(fallback);
+    return Number.isFinite(parsedFallback)
+        ? Math.min(MAX_FPS_LIMIT, Math.max(MIN_FPS_LIMIT, Math.round(parsedFallback)))
+        : DEFAULT_FPS_LIMIT;
+}
+
+function handleSettingsChange(changes, areaName) {
+    if (areaName === 'local' && changes.theme) {
+        applyTheme(changes.theme.newValue);
+        return;
+    }
+
+    if (areaName !== 'sync' || !changes.fpsLimit) return;
+
+    const nextFps = normalizeFpsLimit(changes.fpsLimit.newValue, currentStreamFps || DEFAULT_FPS_LIMIT);
+    if (nextFps === currentStreamFps) return;
+
+    startStreaming(nextFps);
 }
 
 function updateScreenshot(base64Data) {
@@ -279,7 +332,8 @@ function updateScreenshot(base64Data) {
     fpsCounter++;
     const now = Date.now();
     if (now - lastFpsUpdate >= 1000) {
-        fpsIndicator.textContent = `${fpsCounter} FPS`;
+        const measuredFps = Math.round((fpsCounter * 1000) / (now - lastFpsUpdate));
+        fpsIndicator.textContent = `${measuredFps} FPS`;
         fpsCounter = 0;
         lastFpsUpdate = now;
     }

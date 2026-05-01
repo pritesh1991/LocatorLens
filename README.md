@@ -196,8 +196,9 @@ Open the extension **Settings** page to configure:
 | Backend Port | `8765` | Port the Node.js backend listens on |
 | Appium URL | `http://localhost:4723` | Appium server address and port |
 | Screen Mirror FPS | `3` | Frames per second for live screen streaming (1–30) |
+| Theme | `Dark` | Light or dark appearance for Settings and Inspector |
 
-Settings take effect on the next **Start Servers**.
+Backend Port and Appium URL take effect on the next **Start Servers**. Screen Mirror FPS is applied when streaming starts, and an open inspector updates its active stream after you save a new FPS value. Theme changes apply immediately.
 
 ---
 
