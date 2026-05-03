@@ -197,7 +197,7 @@ Backend Port and Appium URL take effect on the next **Start Servers**. Screen Mi
 
 ## LocatorLens and Appium Inspector Workflows
 
-LocatorLens is built for Appium-based workflows and is inspired by the fast visual feedback people expect from inspector tools like Appium Inspector. LocatorLens is an independent Chrome extension and is not affiliated with or endorsed by the Appium project.
+LocatorLens is built for Appium-based workflows and is inspired by the fast visual feedback people expect from inspector tools like Appium Inspector.
 
 | Feature | LocatorLens | Appium Inspector / Desktop Inspector Workflow |
 |---------|:-----------:|:----------------:|
