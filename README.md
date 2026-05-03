@@ -143,23 +143,6 @@ bash extension/installers/install_host.sh --extension-id <your-extension-id>
 # Windows (Command Prompt)
 extension\installers\install_host.bat --extension-id <your-extension-id>
 ```
-
-### Build the Chrome Web Store Package
-
-```bash
-# Generate Chrome Web Store screenshot and promo assets
-npm run prepare:store-assets
-
-# Build dist/locatorlens-companion-v1.0.0.zip, copy it into extension/installers/,
-# and update installer checksum metadata
-npm run build:companion
-
-# Create locatorlens-extension.zip for upload
-npm run package:extension
-```
-
-The Chrome Web Store upload ZIP is `locatorlens-extension.zip`; upload that file, not `extension.crx`. The Options-page installer embeds the companion archive from the extension package, so setup does not depend on a GitHub release being public. If you want a public release URL as a fallback, build with `LOCATORLENS_COMPANION_URL=<public asset URL> npm run build:companion`.
-
 ---
 
 ## How It Works
