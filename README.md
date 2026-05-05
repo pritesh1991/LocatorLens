@@ -6,7 +6,7 @@ Inspect mobile app elements, generate locators, and see a live screen mirror —
 
 ![Node.js](https://img.shields.io/badge/Node.js-18%2B-brightgreen?logo=nodedotjs&logoColor=white)
 ![Appium](https://img.shields.io/badge/Appium-2.x-6c47ff?logo=appium&logoColor=white)
-![Chrome](https://img.shields.io/badge/Chrome-Extension-4285F4?logo=googlechrome&logoColor=white)
+[![Chrome Web Store](https://img.shields.io/badge/Chrome-Extension-4285F4?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/locatorlens/llhionjpfkokofgliiaheadopmdmnadk)
 ![Manifest V3](https://img.shields.io/badge/Manifest-V3-34a853?logoColor=white)
 ![Android](https://img.shields.io/badge/Android-supported-3ddc84?logo=android&logoColor=white)
 ![iOS](https://img.shields.io/badge/iOS-supported-000000?logo=apple&logoColor=white)
@@ -80,7 +80,7 @@ Inspect any foreground app, view the live screen mirror, browse the element tree
 > Get up and running in under 5 minutes.
 
 1. **Install prerequisites** — Node.js 18+, Appium 2.x, and the relevant driver (see [Prerequisites](#prerequisites))
-2. **Install the extension** — from the Chrome Web Store or load unpacked (see [Installation](#installation))
+2. **Install the extension** — [add from Chrome Web Store](https://chromewebstore.google.com/detail/locatorlens/llhionjpfkokofgliiaheadopmdmnadk) or load unpacked (see [Installation](#installation))
 3. **Run the auto setup installer** — from the extension's Settings page
 4. **Connect your device** — start your Android device (USB debugging on) or boot an iOS simulator
 5. **Click the extension icon** → **Start Servers** → select platform and device → **Connect**
@@ -107,7 +107,7 @@ That's it. Open any app on your device and keep inspecting — no reconnection n
 
 ### Option 1 — Chrome Web Store (Recommended)
 
-1. Install **LocatorLens** from the Chrome Web Store after the listing is approved
+1. Install **[LocatorLens](https://chromewebstore.google.com/detail/locatorlens/llhionjpfkokofgliiaheadopmdmnadk)** from the Chrome Web Store
 2. Click the extension icon → **Settings**
 3. Follow the **Setup Guide** on the settings page — it downloads the auto setup installer and registers the local companion
 
