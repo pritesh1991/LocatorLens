@@ -27,6 +27,7 @@ Inspect mobile app elements, generate locators, and see a live screen mirror —
 - [LocatorLens and Appium Inspector Workflows](#locatorlens-and-appium-inspector-workflows)
 - [Troubleshooting](#troubleshooting)
 - [Project Structure](#project-structure)
+- [Attribution](#attribution)
 - [License](#license)
 
 ---
@@ -265,6 +266,21 @@ locatorlens/
 
 ---
 
+## Attribution
+
+LocatorLens was created by **Pritesh Patel**.
+
+If you publish videos, articles, demos, forks, modified versions, redistributed packages, or other public material based on LocatorLens, please clearly credit:
+
+```text
+LocatorLens by Pritesh Patel
+https://github.com/pritesh1991/LocatorLens
+```
+
+Do not present LocatorLens or modified versions of LocatorLens as your original work without attribution. See [NOTICE.md](NOTICE.md).
+
+---
+
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). Copyright © 2026 Pritesh Patel.

@@ -77,6 +77,7 @@ copyDir(path.join(root, 'native-host'), path.join(stagingRoot, 'native-host'), (
 copyFile(path.join(root, 'README.md'), path.join(stagingRoot, 'README.md'));
 copyFile(path.join(root, 'PRIVACY_POLICY.md'), path.join(stagingRoot, 'PRIVACY_POLICY.md'));
 copyFile(path.join(root, 'LICENSE'), path.join(stagingRoot, 'LICENSE'));
+copyFile(path.join(root, 'NOTICE.md'), path.join(stagingRoot, 'NOTICE.md'));
 
 zipDirectory(stagingRoot, outputPath);
 const digest = sha256(outputPath);
