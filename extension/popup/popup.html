@@ -80,35 +80,34 @@
 
 
     <div class="footer">
-      <a href="#" id="help-link" title="Help & Prerequisites">
+      <a href="#" id="feedback-link" title="Send Feedback">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"></circle>
-          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          <path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
+          <path d="M8 9h8M8 13h5"></path>
         </svg>
-        Help
+        Feedback
       </a>
       <a href="#" id="settings-link">Settings</a>
-      <span class="version">v1.0.0</span>
+      <span class="version">v1.1.0</span>
     </div>
 
-    <!-- Error Modal -->
+    <!-- Setup/info Modal -->
     <div id="error-modal" class="error-modal hidden">
       <div class="error-modal-content">
         <div class="error-modal-header">
-          <h3>Server Startup Failed</h3>
-          <button id="error-modal-close" class="error-modal-close">&times;</button>
+          <h3 id="error-modal-title">Setup Information</h3>
         </div>
         <div class="error-modal-body" id="error-modal-body">
           <!-- Error content will be inserted here -->
         </div>
         <div class="error-modal-footer">
-          <button id="error-help-btn" class="btn btn-primary btn-sm">View Help & Prerequisites</button>
+          <button id="error-help-btn" class="btn btn-primary btn-sm">Open Settings</button>
         </div>
       </div>
     </div>
   </div>
 
+  <script src="../analytics.js"></script>
   <script src="popup.js"></script>
 </body>
 

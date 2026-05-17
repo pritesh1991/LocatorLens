@@ -11,6 +11,7 @@ const filterBtns = document.querySelectorAll('.filter-btn');
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
+    LocatorLensAnalytics.trackPageView('logs', 'LocatorLens Server Logs');
     setupEventListeners();
     loadInitialLogs();
 });
@@ -102,6 +103,7 @@ function addLogEntry(message, level = 'info', timestamp = null) {
 function clearLogs() {
     logs = [];
     logsContent.innerHTML = '';
+    LocatorLensAnalytics.trackEvent('logs_cleared', { surface: 'logs' });
 
     // Show empty state again
     const emptyStateEl = document.createElement('div');
@@ -120,6 +122,10 @@ function clearLogs() {
 
 function setFilter(filter) {
     currentFilter = filter;
+    LocatorLensAnalytics.trackEvent('logs_filter_changed', {
+        surface: 'logs',
+        log_filter: filter
+    });
 
     // Update active button
     filterBtns.forEach(btn => {

@@ -1,4 +1,6 @@
 // Background service worker for the extension
+importScripts('analytics.js');
+
 console.log('LocatorLens background service initialized');
 
 let nativePort = null;
@@ -9,6 +11,23 @@ const MAX_LOG_HISTORY = 1000;
 let nativeHostAvailable = false; // Track native host availability
 let nativeRequestId = 0;
 const pendingNativeRequests = new Map();
+
+function configureUninstallFeedbackUrl() {
+    const manifest = chrome.runtime.getManifest();
+    const params = new URLSearchParams({
+        source: 'chrome-extension-uninstall',
+        extensionId: chrome.runtime.id,
+        version: manifest.version
+    });
+
+    chrome.runtime.setUninstallURL(`https://locatorlens.com/uninstall-feedback?${params.toString()}`, () => {
+        if (chrome.runtime.lastError) {
+            console.warn('Failed to set uninstall feedback URL:', chrome.runtime.lastError.message);
+        }
+    });
+}
+
+configureUninstallFeedbackUrl();
 
 // Connect to Native Host
 function connectToNativeHost() {
@@ -102,10 +121,10 @@ function connectToNativeHost() {
 
                 // Provide helpful messages for common errors
                 if (error.includes('Specified native messaging host not found')) {
-                    userMessage = 'Native host not found. Please run the LocatorLens auto setup installer, then reload the extension.';
+                    userMessage = 'Install the local companion once to start servers and connect your devices.';
                     helpNeeded = true;
                 } else if (error.includes('Access to the specified native messaging host is forbidden')) {
-                    userMessage = 'Access to the native messaging host is forbidden. Open Options, re-download and re-run the installer, then reload the extension.';
+                    userMessage = 'Open Settings, re-run the companion installer, then reload the extension.';
                     helpNeeded = true;
                 } else if (error.includes('Native host has exited')) {
                     userMessage = 'Native host crashed. Check that Node.js is installed and in your PATH.';
@@ -122,9 +141,9 @@ function connectToNativeHost() {
                 chrome.runtime.sendMessage({
                     type: 'server-start-error',
                     errors: [{
-                        server: 'Native Host',
+                        server: 'Local Companion',
                         error: userMessage,
-                        code: 'NATIVE_HOST_ERROR'
+                        code: helpNeeded ? 'COMPANION_SETUP_REQUIRED' : 'NATIVE_HOST_ERROR'
                     }]
                 }).catch(() => { });
             }
@@ -261,7 +280,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         console.error('[Background] Could not connect to native host after waiting');
                         sendResponse({
                             success: false,
-                            error: 'Could not connect to native host. Please run the LocatorLens auto setup installer first.'
+                            code: 'COMPANION_SETUP_REQUIRED',
+                            error: 'Install the local companion once to start servers and connect your devices.'
                         });
                     }
                 }, 100);
@@ -318,6 +338,10 @@ function normalizeFpsLimit(value, fallback = 3) {
 // Handle device connection in background - runs even if popup closes
 async function handleDeviceConnection(deviceInfo) {
     console.log('Background: connecting to device', deviceInfo.name);
+    LocatorLensAnalytics.trackEvent('device_connect_started', {
+        surface: 'background',
+        platform: deviceInfo.platform || 'unknown'
+    });
 
     // Read backend port from settings
     const settings = await new Promise(resolve =>
@@ -357,6 +381,10 @@ async function handleDeviceConnection(deviceInfo) {
                 success: true,
                 device: deviceInfo.name
             }).catch(() => {});
+            LocatorLensAnalytics.trackEvent('device_connect_succeeded', {
+                surface: 'background',
+                platform: deviceInfo.platform || 'unknown'
+            });
         } else {
             console.error('Background: session creation failed', data.error);
             chrome.runtime.sendMessage({
@@ -364,6 +392,11 @@ async function handleDeviceConnection(deviceInfo) {
                 success: false,
                 error: data.error || 'Session creation failed'
             }).catch(() => {});
+            LocatorLensAnalytics.trackEvent('device_connect_failed', {
+                surface: 'background',
+                platform: deviceInfo.platform || 'unknown',
+                error_code: 'session_create_failed'
+            });
         }
     } catch (error) {
         console.error('Background: connection error', error.message);
@@ -372,6 +405,11 @@ async function handleDeviceConnection(deviceInfo) {
             success: false,
             error: error.message || 'Connection failed'
         }).catch(() => {});
+        LocatorLensAnalytics.trackEvent('device_connect_failed', {
+            surface: 'background',
+            platform: deviceInfo.platform || 'unknown',
+            error_code: 'network_error'
+        });
     }
 }
 
@@ -411,8 +449,11 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 checkNativeHostConnection();
 
 // Listen for extension installation
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener((details) => {
     console.log('LocatorLens installed');
+    LocatorLensAnalytics.trackEvent(details.reason === 'update' ? 'extension_updated' : 'extension_installed', {
+        surface: 'background'
+    });
     connectToNativeHost();
 });
 
