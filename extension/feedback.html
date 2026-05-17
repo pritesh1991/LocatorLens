@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LocatorLens - Feedback</title>
+    <link rel="stylesheet" href="feedback.css">
+</head>
+
+<body>
+    <main class="page">
+        <header class="hero">
+            <div class="brand">
+                <img src="icons/icon_optimized.svg" width="36" height="36" alt="LocatorLens">
+                <div>
+                    <h1>Feedback</h1>
+                    <p>Share bugs, locator issues, or ideas that would make LocatorLens better.</p>
+                </div>
+            </div>
+        </header>
+
+        <form id="feedback-form" class="card">
+            <div class="form-row">
+                <label for="feedback-type">Feedback type</label>
+                <select id="feedback-type" required>
+                    <option value="Bug report">Bug report</option>
+                    <option value="Locator accuracy">Locator accuracy</option>
+                    <option value="Feature request">Feature request</option>
+                    <option value="General feedback">General feedback</option>
+                </select>
+            </div>
+
+            <div class="form-row">
+                <label for="message">Message</label>
+                <textarea id="message" rows="8" placeholder="What happened? What did you expect?" required></textarea>
+            </div>
+
+            <div class="form-grid">
+                <div class="form-row">
+                    <label for="contact">Contact email</label>
+                    <input id="contact" type="email" placeholder="you@example.com">
+                </div>
+
+                <div class="form-row">
+                    <label for="platform">Platform / device</label>
+                    <input id="platform" type="text" placeholder="Android emulator, iOS simulator, etc.">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <label for="diagnostics">Diagnostics notes</label>
+                <textarea id="diagnostics" rows="4" placeholder="Optional: Appium version, extension version, locator shown, logs, or reproduction steps."></textarea>
+            </div>
+
+            <div class="actions">
+                <button type="submit" class="btn">Send Feedback</button>
+                <p id="status" class="status" role="status"></p>
+            </div>
+        </form>
+    </main>
+
+    <script src="analytics.js"></script>
+    <script src="feedback.js"></script>
+</body>
+
+</html>

@@ -16,6 +16,7 @@ function normalizeFpsLimit(value, fallback = DEFAULT_FPS_LIMIT) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    LocatorLensAnalytics.trackPageView('options', 'LocatorLens Options');
     loadSettings();
     loadTheme();
     setupTabs();
@@ -55,6 +56,10 @@ function setupThemeToggle() {
             const theme = normalizeTheme(btn.dataset.theme);
             applyTheme(theme);
             chrome.storage.local.set({ theme });
+            LocatorLensAnalytics.trackEvent('theme_changed', {
+                surface: 'options',
+                theme
+            });
         });
     });
 }
@@ -74,6 +79,10 @@ function setupTabs() {
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             btn.classList.add('active');
             document.getElementById(`tab-${tab}`)?.classList.add('active');
+            LocatorLensAnalytics.trackEvent('options_tab_changed', {
+                surface: 'options',
+                platform: tab
+            });
         });
     });
 
@@ -161,6 +170,12 @@ function embedCompanionForBatch(content, companionB64) {
 async function downloadInstaller(filename, downloadName = filename) {
     const status = document.getElementById('download-status');
     const extensionId = chrome.runtime.id;
+    const platform = filename.endsWith('.bat') ? 'windows' : 'mac';
+
+    LocatorLensAnalytics.trackEvent('installer_download_clicked', {
+        surface: 'options',
+        platform
+    });
 
     try {
         const [installerResp, launcherResp, release] = await Promise.all([
@@ -212,14 +227,24 @@ async function downloadInstaller(filename, downloadName = filename) {
             status.textContent = `Downloaded ${downloadName} — run it to complete setup.`;
             setTimeout(() => { status.textContent = ''; }, 6000);
         }
+        LocatorLensAnalytics.trackEvent('installer_download_succeeded', {
+            surface: 'options',
+            platform
+        });
     } catch (e) {
         if (status) status.textContent = 'Download failed. Try again.';
+        LocatorLensAnalytics.trackEvent('installer_download_failed', {
+            surface: 'options',
+            platform,
+            error_code: 'download_failed'
+        });
     }
 }
 
 async function checkBackendStatus() {
     const resultEl = document.getElementById('check-result');
     resultEl.innerHTML = '<span style="color: var(--text-secondary);">Checking...</span>';
+    LocatorLensAnalytics.trackEvent('backend_check_clicked', { surface: 'options' });
 
     const port = document.getElementById('backend-port').value || 8765;
     const checks = [];
@@ -263,6 +288,12 @@ async function checkBackendStatus() {
         checks.push({ label: 'Backend server', ok: false, msg: 'Not running — click "Start Servers" in the popup first' });
     }
 
+    const setupHealthy = checks.every(c => c.ok || c.warn);
+    LocatorLensAnalytics.trackEvent(setupHealthy ? 'backend_check_succeeded' : 'backend_check_failed', {
+        surface: 'options',
+        result: setupHealthy ? 'success' : 'failed'
+    });
+
     resultEl.innerHTML = checks.map(c => `
         <div class="status-item">
             <span class="dot ${c.ok ? 'ok' : c.warn ? 'warn' : 'err'}"></span>
@@ -291,5 +322,9 @@ function saveSettings() {
         const orig = btn.textContent;
         btn.textContent = 'Saved!';
         setTimeout(() => { btn.textContent = orig; }, 1500);
+        LocatorLensAnalytics.trackEvent('settings_saved', {
+            surface: 'options',
+            fps_limit: fpsLimit
+        });
     });
 }

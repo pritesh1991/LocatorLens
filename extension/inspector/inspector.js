@@ -29,6 +29,9 @@ let wsReconnectAttempts = 0;
 let wsReconnectTimer = null;
 let wsIntentionalClose = false; // Track if we closed on purpose
 let currentStreamFps = null;
+let currentDisplayedLocators = [];
+let sourceSearchTracked = false;
+let pendingPageSourceRefreshSource = 'manual';
 
 // DOM Elements
 const deviceNameEl = document.getElementById('device-name');
@@ -57,6 +60,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     await loadTheme();
     await loadSession();
+    LocatorLensAnalytics.trackPageView('inspector', 'LocatorLens Inspector');
     setupEventListeners();
     connectWebSocket();
 });
@@ -90,6 +94,10 @@ function toggleTheme() {
 
     applyTheme(theme);
     chrome.storage.local.set({ theme });
+    LocatorLensAnalytics.trackEvent('theme_changed', {
+        surface: 'inspector',
+        theme
+    });
 }
 
 async function loadSession() {
@@ -109,6 +117,7 @@ function setupEventListeners() {
     modeToggleBtn.addEventListener('click', toggleMode);
     themeToggleBtn.addEventListener('click', toggleTheme);
     refreshBtn.addEventListener('click', () => {
+        LocatorLensAnalytics.trackEvent('page_source_refresh_clicked', { surface: 'inspector' });
         if (isLoadingPageSource) {
             showNotification('Already refreshing...', 'info');
             return;
@@ -179,6 +188,10 @@ function connectWebSocket() {
         wsIntentionalClose = false;
         updateConnectionStatus(true);
         showNotification('Connected to backend', 'success');
+        LocatorLensAnalytics.trackEvent('inspector_connected', {
+            surface: 'inspector',
+            platform: sessionInfo?.device?.platform || 'unknown'
+        });
         startStreaming();
     };
 
@@ -199,6 +212,10 @@ function connectWebSocket() {
     ws.onclose = (event) => {
         console.log('WebSocket disconnected, code:', event.code);
         updateConnectionStatus(false);
+        LocatorLensAnalytics.trackEvent('inspector_disconnected', {
+            surface: 'inspector',
+            result: wsIntentionalClose ? 'intentional' : 'unexpected'
+        });
 
         if (!wsIntentionalClose) {
             scheduleReconnect();
@@ -209,6 +226,7 @@ function connectWebSocket() {
 function scheduleReconnect() {
     if (wsReconnectAttempts >= WS_RECONNECT_MAX_ATTEMPTS) {
         showNotification('Connection lost. Please refresh the page.', 'error');
+        LocatorLensAnalytics.trackEvent('inspector_reconnect_failed', { surface: 'inspector' });
         return;
     }
 
@@ -221,6 +239,10 @@ function scheduleReconnect() {
 
     console.log(`Reconnecting in ${Math.round(delay / 1000)}s (attempt ${wsReconnectAttempts}/${WS_RECONNECT_MAX_ATTEMPTS})`);
     showNotification(`Reconnecting... (attempt ${wsReconnectAttempts})`, 'warning');
+    LocatorLensAnalytics.trackEvent('inspector_reconnect_started', {
+        surface: 'inspector',
+        reconnect_attempt: wsReconnectAttempts + 1
+    });
 
     wsReconnectTimer = setTimeout(() => {
         connectWebSocket();
@@ -250,6 +272,11 @@ function handleWebSocketMessage(message) {
         case 'streaming-started':
             currentStreamFps = normalizeFpsLimit(message.fps, currentStreamFps || DEFAULT_FPS_LIMIT);
             console.log(`Streaming started at ${currentStreamFps} FPS`);
+            LocatorLensAnalytics.trackEvent('streaming_started', {
+                surface: 'inspector',
+                platform: sessionInfo?.device?.platform || 'unknown',
+                fps_limit: currentStreamFps
+            });
             // Safe to request page source now — ws.deviceId is set on the server
             refreshPageSource();
             break;
@@ -470,10 +497,20 @@ async function sendTap(x, y) {
 
         // Force a refresh after tap
         setTimeout(() => refreshPageSource(true), 1000); // Wait 1s for animation
+        LocatorLensAnalytics.trackEvent('device_tap_sent', {
+            surface: 'inspector',
+            platform: sessionInfo.device.platform || 'unknown',
+            result: 'success'
+        });
 
     } catch (error) {
         console.error('Tap failed:', error);
         showNotification('Tap failed: ' + error.message, 'error');
+        LocatorLensAnalytics.trackEvent('device_tap_sent', {
+            surface: 'inspector',
+            platform: sessionInfo.device.platform || 'unknown',
+            result: 'failed'
+        });
     }
 }
 
@@ -494,6 +531,10 @@ function toggleMode() {
         clearElementHighlight();
         isElementLocked = false;
         showNotification('Interact Mode: Click to tap, Drag to scroll', 'info');
+        LocatorLensAnalytics.trackEvent('mode_changed', {
+            surface: 'inspector',
+            mode: 'interact'
+        });
     } else {
         // Switch to inspect mode
         modeToggleBtn.classList.remove('active');
@@ -502,6 +543,10 @@ function toggleMode() {
         modeLabel.textContent = 'Inspect';
         screenImage.style.cursor = 'crosshair';
         showNotification('Inspect Mode: Click to select elements', 'info');
+        LocatorLensAnalytics.trackEvent('mode_changed', {
+            surface: 'inspector',
+            mode: 'inspect'
+        });
     }
 }
 
@@ -679,14 +724,20 @@ function findElementAtCoordinates(x, y, isClick = false) {
         selectedElement = {
             tagName: foundElement.tagName,
             attributes,
-            xpath
+            xpath,
+            xmlNode: foundElement
         };
 
-        displayElementDetails(selectedElement);
+        displayElementDetails(selectedElement, isClick);
 
         // Only show notification on click to avoid spamming
         if (isClick) {
             showNotification(`Element found: ${foundElement.tagName}`, 'success');
+            LocatorLensAnalytics.trackEvent('screen_element_selected', {
+                surface: 'inspector',
+                platform: sessionInfo?.device?.platform || 'unknown',
+                element_class: foundElement.tagName
+            });
         }
     } else {
         // console.warn('No element found at coordinates');
@@ -695,11 +746,32 @@ function findElementAtCoordinates(x, y, isClick = false) {
 
         if (isClick) {
             showNotification('No element found at this location', 'error');
+            LocatorLensAnalytics.trackEvent('screen_element_select_failed', {
+                surface: 'inspector',
+                platform: sessionInfo?.device?.platform || 'unknown'
+            });
         }
     }
 }
 
 function drawElementHighlight(xmlElement, isClick = false) {
+    const displayRect = getDisplayRectForElement(xmlElement);
+    if (!displayRect) return;
+
+    clearElementHighlight();
+    positionScreenOverlay();
+
+    const highlight = document.createElement('div');
+    highlight.className = `element-highlight ${isClick ? '' : 'hover'}`;
+    highlight.style.left = `${displayRect.x}px`;
+    highlight.style.top = `${displayRect.y}px`;
+    highlight.style.width = `${displayRect.width}px`;
+    highlight.style.height = `${displayRect.height}px`;
+
+    document.getElementById('screen-overlay').appendChild(highlight);
+}
+
+function getDisplayRectForElement(xmlElement) {
     let x1, y1, x2, y2;
     let needsScaling = false; // Android bounds are in pixels, iOS are in points
 
@@ -744,18 +816,15 @@ function drawElementHighlight(xmlElement, isClick = false) {
     const displayWidth = (x2 - x1) * scaleX;
     const displayHeight = (y2 - y1) * scaleY;
 
-    // Clear previous highlight
-    clearElementHighlight();
+    return {
+        x: displayX,
+        y: displayY,
+        width: displayWidth,
+        height: displayHeight
+    };
+}
 
-    // Create highlight box
-    const highlight = document.createElement('div');
-    highlight.className = `element-highlight ${isClick ? '' : 'hover'}`;
-    highlight.style.left = `${displayX}px`;
-    highlight.style.top = `${displayY}px`;
-    highlight.style.width = `${displayWidth}px`;
-    highlight.style.height = `${displayHeight}px`;
-
-    // Get screen overlay
+function positionScreenOverlay() {
     const screenOverlay = document.getElementById('screen-overlay');
     const container = document.getElementById('screen-container');
     const imageRect = screenImage.getBoundingClientRect();
@@ -766,8 +835,6 @@ function drawElementHighlight(xmlElement, isClick = false) {
     screenOverlay.style.top = `${imageRect.top - containerRect.top}px`;
     screenOverlay.style.width = `${imageRect.width}px`;
     screenOverlay.style.height = `${imageRect.height}px`;
-
-    screenOverlay.appendChild(highlight);
 }
 
 function clearElementHighlight() {
@@ -792,7 +859,13 @@ function highlightElementInTree(xmlElement) {
     // Select this element
     headerDiv.classList.add('selected');
 
-    // Expand all parent nodes in the path to this element
+    revealTreeHeader(headerDiv);
+
+    // Scroll into view
+    headerDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function revealTreeHeader(headerDiv) {
     let parent = headerDiv.parentElement; // Start with .tree-node
     while (parent) {
         if (parent.classList.contains('tree-children')) {
@@ -812,9 +885,12 @@ function highlightElementInTree(xmlElement) {
         }
         parent = parent.parentElement;
     }
+}
 
-    // Scroll into view
-    headerDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+function clearLocatorMatchHighlights() {
+    document.querySelectorAll('.tree-node-header.locator-match').forEach(el => {
+        el.classList.remove('locator-match');
+    });
 }
 
 
@@ -830,6 +906,7 @@ async function refreshPageSource(silent = false) {
     }
 
     isLoadingPageSource = true;
+    pendingPageSourceRefreshSource = silent ? 'auto' : 'manual';
     if (!silent) {
         sourceLoading.classList.remove('hidden');
     }
@@ -875,6 +952,7 @@ function updatePageSource(xmlString) {
 
     // Clear search highlights
     clearSearchHighlights();
+    clearLocatorMatchHighlights();
 
     // Reset element details to empty state
     elementDetails.innerHTML = `
@@ -962,6 +1040,11 @@ function updatePageSource(xmlString) {
     // Count elements
     const allElements = xmlDoc.getElementsByTagName('*');
     elementCount.textContent = `${allElements.length} elements`;
+    LocatorLensAnalytics.trackEvent(pendingPageSourceRefreshSource === 'auto' ? 'page_source_auto_refreshed' : 'page_source_refreshed', {
+        surface: 'inspector',
+        source: pendingPageSourceRefreshSource,
+        element_count: allElements.length
+    });
 
     // Reset element-to-node mapping for new page source
     elementToNodeMap = new WeakMap();
@@ -1091,14 +1174,19 @@ function getKeyAttributes(xmlNode) {
 
 function toggleNode(headerDiv, childrenDiv) {
     const toggle = headerDiv.querySelector('.tree-toggle');
+    const willExpand = !childrenDiv.classList.contains('expanded');
 
-    if (childrenDiv.classList.contains('expanded')) {
+    if (!willExpand) {
         childrenDiv.classList.remove('expanded');
         toggle.classList.remove('expanded');
     } else {
         childrenDiv.classList.add('expanded');
         toggle.classList.add('expanded');
     }
+    LocatorLensAnalytics.trackEvent('source_tree_node_toggled', {
+        surface: 'inspector',
+        expanded: willExpand
+    });
 }
 
 function selectElement(xmlNode, headerDiv) {
@@ -1120,103 +1208,252 @@ function selectElement(xmlNode, headerDiv) {
     selectedElement = {
         tagName: xmlNode.tagName,
         attributes,
-        xpath
+        xpath,
+        xmlNode
     };
 
     // Generate and display locators
-    displayElementDetails(selectedElement);
+    displayElementDetails(selectedElement, true);
+    LocatorLensAnalytics.trackEvent('tree_element_selected', {
+        surface: 'inspector',
+        platform: sessionInfo?.device?.platform || 'unknown',
+        element_class: xmlNode.tagName
+    });
 }
 
 function countMatchingElements(locator) {
-    if (!currentXmlDoc) return 0;
+    return getMatchingElements(locator).length;
+}
+
+function getMatchingElements(locator) {
+    if (!currentXmlDoc || !locator) return [];
 
     try {
-        let count = 0;
         const strategy = locator.strategy;
         const value = locator.value;
 
-        // Count based on strategy type
         if (strategy === 'id' || strategy === 'resource-id') {
-            // Android Resource ID
-            count = currentXmlDoc.querySelectorAll(`[resource-id="${value}"]`).length;
-        } else if (strategy === 'accessibility id') {
-            // iOS name or Android content-desc
-            const nameMatches = currentXmlDoc.querySelectorAll(`[name="${value}"]`).length;
-            const descMatches = currentXmlDoc.querySelectorAll(`[content-desc="${value}"]`).length;
-            count = nameMatches + descMatches;
-        } else if (strategy === 'class name') {
-            count = currentXmlDoc.querySelectorAll(`[class="${value}"]`).length;
-        } else if (strategy === 'xpath') {
-            // Use XPath evaluator
-            try {
-                const result = currentXmlDoc.evaluate(
-                    value,
-                    currentXmlDoc,
-                    null,
-                    XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
-                    null
-                );
-                count = result.snapshotLength;
-            } catch (e) {
-                console.warn('XPath evaluation error:', e);
-                count = 0;
-            }
-        } else if (strategy === '-android uiautomator') {
-            // UiAutomator - extract the selector and count
-            if (value.includes('resourceId')) {
-                const match = value.match(/resourceId\("([^"]+)"\)/);
-                if (match) {
-                    count = currentXmlDoc.querySelectorAll(`[resource-id="${match[1]}"]`).length;
-                }
-            } else if (value.includes('text')) {
-                const match = value.match(/text\("([^"]+)"\)/);
-                if (match) {
-                    count = currentXmlDoc.querySelectorAll(`[text="${match[1]}"]`).length;
-                }
-            }
-        } else if (strategy === '-ios predicate string') {
-            // iOS Predicate - parse simple predicates
-            if (value.includes('name ==')) {
-                const match = value.match(/name\s*==\s*"([^"]+)"/);
-                if (match) {
-                    count = currentXmlDoc.querySelectorAll(`[name="${match[1]}"]`).length;
-                }
-            } else if (value.includes('label ==')) {
-                const match = value.match(/label\s*==\s*"([^"]+)"/);
-                if (match) {
-                    count = currentXmlDoc.querySelectorAll(`[label="${match[1]}"]`).length;
-                }
-            } else if (value.includes('value ==')) {
-                const match = value.match(/value\s*==\s*"([^"]+)"/);
-                if (match) {
-                    count = currentXmlDoc.querySelectorAll(`[value="${match[1]}"]`).length;
-                }
-            }
-        } else if (strategy === '-ios class chain') {
-            // iOS Class Chain - simplified count
-            if (value.includes('name ==')) {
-                const match = value.match(/name\s*==\s*"([^"]+)"/);
-                if (match) {
-                    count = currentXmlDoc.querySelectorAll(`[name="${match[1]}"]`).length;
-                }
-            } else {
-                // Just type-based, count all of that type
-                const typeMatch = value.match(/XCUIElementType(\w+)/);
-                if (typeMatch) {
-                    count = currentXmlDoc.getElementsByTagName(`XCUIElementType${typeMatch[1]}`).length;
-                }
-            }
+            return getElementsByAttribute('resource-id', value);
         }
 
-        return count;
+        if (strategy === 'accessibility id') {
+            return [
+                ...getElementsByAttribute('name', value),
+                ...getElementsByAttribute('content-desc', value)
+            ];
+        }
+
+        if (strategy === 'class name') {
+            return getElementsByAttribute('class', value);
+        }
+
+        if (strategy === 'xpath') {
+            return evaluateXPath(value);
+        }
+
+        if (strategy === '-android uiautomator') {
+            const resourceId = extractQuotedSelectorValue(value, 'resourceId');
+            if (resourceId) return getElementsByAttribute('resource-id', resourceId);
+
+            const text = extractQuotedSelectorValue(value, 'text');
+            if (text) return getElementsByAttribute('text', text);
+        }
+
+        if (strategy === '-ios predicate string') {
+            const predicate = parseSimplePredicate(value);
+            if (predicate) return getElementsByAttribute(predicate.attribute, predicate.value);
+        }
+
+        if (strategy === '-ios class chain') {
+            let matches = [];
+            const className = extractIOSClassName(value);
+            if (className) {
+                matches = Array.from(currentXmlDoc.getElementsByTagName(className));
+            }
+
+            const predicate = parseSimplePredicate(value);
+            if (predicate) {
+                const predicateMatches = getElementsByAttribute(predicate.attribute, predicate.value);
+                if (matches.length > 0) {
+                    return predicateMatches.filter(element => matches.includes(element));
+                }
+                return predicateMatches;
+            }
+
+            return matches;
+        }
     } catch (e) {
-        console.error('Error counting elements:', e);
-        return 0;
+        console.error('Error matching elements:', e);
+    }
+
+    return [];
+}
+
+function getElementsByAttribute(attribute, value) {
+    return Array.from(currentXmlDoc.getElementsByTagName('*')).filter(element => (
+        element.getAttribute(attribute) === value
+    ));
+}
+
+function evaluateXPath(xpath) {
+    try {
+        const result = currentXmlDoc.evaluate(
+            xpath,
+            currentXmlDoc,
+            null,
+            XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
+            null
+        );
+        const matches = [];
+        for (let i = 0; i < result.snapshotLength; i++) {
+            matches.push(result.snapshotItem(i));
+        }
+        return matches;
+    } catch (e) {
+        console.warn('XPath evaluation error:', e);
+        return [];
     }
 }
 
-function displayElementDetails(element) {
+function extractQuotedSelectorValue(selector, methodName) {
+    const match = selector.match(new RegExp(`${methodName}\\("((?:\\\\.|[^"])*)"\\)`));
+    return match ? unescapeLocatorString(match[1]) : '';
+}
+
+function parseSimplePredicate(predicate) {
+    const match = predicate.match(/\b(name|label|value)\s*==\s*"((?:\\.|[^"])*)"/);
+    if (!match) return null;
+
+    return {
+        attribute: match[1],
+        value: unescapeLocatorString(match[2])
+    };
+}
+
+function extractIOSClassName(classChain) {
+    const match = classChain.match(/(?:^|\/)(XCUIElementType[A-Za-z0-9_]+)/);
+    return match ? match[1] : '';
+}
+
+function unescapeLocatorString(value) {
+    return value.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+}
+
+function getMatchCountClass(matchCount) {
+    if (matchCount === 1) return 'count-unique';
+    if (matchCount === 0) return 'count-none';
+    return 'count-multiple';
+}
+
+function formatMatchCount(matchCount) {
+    return `${matchCount} ${matchCount === 1 ? 'match' : 'matches'}`;
+}
+
+function getMatchCountBucket(matchCount) {
+    if (matchCount === 1) return '1';
+    if (matchCount <= 5) return '2_5';
+    if (matchCount <= 20) return '6_20';
+    return '20_plus';
+}
+
+function buildLocatorDisplayItems(locators, selectedXmlNode) {
+    let items = locators
+        .map(locator => ({
+            locator,
+            matchCount: countMatchingElements(locator)
+        }))
+        .filter(item => item.matchCount > 0);
+
+    const hasUniqueLocator = items.some(item => item.matchCount === 1);
+
+    if (!hasUniqueLocator && selectedXmlNode) {
+        const fallbackLocators = createUniqueFallbackLocators(selectedXmlNode, locators);
+        const fallbackItems = fallbackLocators
+            .map(locator => ({
+                locator,
+                matchCount: countMatchingElements(locator)
+            }))
+            .filter(item => item.matchCount === 1);
+
+        items = [...fallbackItems, ...items];
+    }
+
+    return items.sort((a, b) => {
+        const uniqueDelta = Number(b.matchCount === 1) - Number(a.matchCount === 1);
+        if (uniqueDelta !== 0) return uniqueDelta;
+        return b.locator.priority - a.locator.priority;
+    });
+}
+
+function createUniqueFallbackLocators(xmlNode, existingLocators) {
+    const existingKeys = new Set(existingLocators.map(locator => `${locator.strategy}::${locator.value}`));
+    const candidates = [
+        createIndexedXPathLocator(xmlNode),
+        createCoordinateXPathLocator(xmlNode)
+    ].filter(Boolean);
+
+    return candidates.filter(locator => {
+        const key = `${locator.strategy}::${locator.value}`;
+        if (existingKeys.has(key)) return false;
+        existingKeys.add(key);
+        return true;
+    });
+}
+
+function createCoordinateXPathLocator(xmlNode) {
+    const tagName = xmlNode.tagName;
+    if (!tagName) return null;
+
+    const attrPairs = [];
+    if (xmlNode.getAttribute('x') && xmlNode.getAttribute('y')) {
+        attrPairs.push(['x', xmlNode.getAttribute('x')], ['y', xmlNode.getAttribute('y')]);
+    } else if (xmlNode.getAttribute('bounds')) {
+        attrPairs.push(['bounds', xmlNode.getAttribute('bounds')]);
+    }
+
+    if (attrPairs.length === 0) return null;
+
+    const predicates = attrPairs
+        .map(([name, value]) => `@${name}=${toXPathLiteral(value)}`)
+        .join(' and ');
+
+    return {
+        type: 'XPATH',
+        strategy: 'xpath',
+        value: `//${tagName}[${predicates}]`,
+        priority: 90,
+        confidence: 'fallback'
+    };
+}
+
+function createIndexedXPathLocator(xmlNode) {
+    const tagName = xmlNode.tagName;
+    if (!tagName || !currentXmlDoc) return null;
+
+    const sameTagElements = Array.from(currentXmlDoc.getElementsByTagName(tagName));
+    const index = sameTagElements.indexOf(xmlNode);
+    if (index < 0) return null;
+
+    return {
+        type: 'XPATH',
+        strategy: 'xpath',
+        value: `(//${tagName})[${index + 1}]`,
+        priority: 95,
+        confidence: 'fallback'
+    };
+}
+
+function toXPathLiteral(value) {
+    const text = String(value);
+    if (!text.includes('"')) return `"${text}"`;
+    if (!text.includes("'")) return `'${text}'`;
+
+    return `concat(${text.split('"').map(part => `"${part}"`).join(', \'"\', ')})`;
+}
+
+function displayElementDetails(element, focusLocators = true) {
     console.log('displayElementDetails called with:', element);
+    clearLocatorMatchHighlights();
 
     try {
         if (!sessionInfo || !sessionInfo.device) {
@@ -1227,20 +1464,25 @@ function displayElementDetails(element) {
 
         console.log('Generating locators for platform:', sessionInfo.device.platform);
         const locators = LocatorGenerator.generateLocators(element, sessionInfo.device.platform);
-        console.log('Generated locators:', locators);
+        const locatorsWithMatches = buildLocatorDisplayItems(locators, element.xmlNode);
+        const hasFallbackUnique = locatorsWithMatches.some(item => item.locator.confidence === 'fallback' && item.matchCount === 1);
+        currentDisplayedLocators = locatorsWithMatches.map(item => item.locator);
+        console.log('Generated locators:', currentDisplayedLocators);
 
         let html = '';
+        let attributesHtml = '';
+        let locatorsHtml = '';
 
         // Attributes section
-        html += '<div class="detail-section">';
-        html += '<h3>Attributes</h3>';
+        attributesHtml += '<div class="detail-section">';
+        attributesHtml += '<h3>Attributes</h3>';
 
         if (Object.keys(element.attributes).length === 0) {
-            html += '<p>No attributes available</p>';
+            attributesHtml += '<p>No attributes available</p>';
         } else {
             for (const [key, value] of Object.entries(element.attributes)) {
                 if (value) {
-                    html += `
+                    attributesHtml += `
                 <div class="detail-row">
                   <div class="detail-label">${key}</div>
                   <div class="detail-value">${escapeHtml(value)}</div>
@@ -1249,39 +1491,56 @@ function displayElementDetails(element) {
                 }
             }
         }
-        html += '</div>';
+        attributesHtml += '</div>';
 
         // Locators section
-        html += '<div class="detail-section">';
-        html += '<h3>Locator Strategies</h3>';
+        locatorsHtml += '<div class="detail-section locator-strategies-section" id="locator-strategies-section">';
+        locatorsHtml += `
+            <div class="locator-section-header">
+                <h3>Locator Strategies</h3>
+            </div>
+        `;
 
-        if (locators.length === 0) {
-            html += '<p class="empty-state">No locators generated for this element.</p>';
+        if (locatorsWithMatches.length === 0) {
+            locatorsHtml += '<p class="empty-state">No matching locators found for this element.</p>';
         } else {
-            locators.forEach((locator, index) => {
-                // Count matching elements for this locator
-                const matchCount = countMatchingElements(locator);
-                const isUnique = matchCount === 1;
-                const countClass = isUnique ? 'count-unique' : 'count-multiple';
-                const countIcon = isUnique ? '✓' : '⚠';
+            if (hasFallbackUnique) {
+                locatorsHtml += `
+                    <div class="locator-guidance">
+                        No stable unique ID/accessibility locator was found. LocatorLens added a unique relative XPath fallback; ask developers to add an accessibility identifier for a more stable selector.
+                    </div>
+                `;
+            }
+            locatorsWithMatches.forEach(({ locator, matchCount }, index) => {
+                const countClass = getMatchCountClass(matchCount);
+                const matchText = formatMatchCount(matchCount);
 
-                html += `
-              <div class="locator-item">
+                locatorsHtml += `
+              <div class="locator-item ${locator.confidence === 'fallback' ? 'locator-fallback' : ''}">
                 <div class="locator-header">
-                  <span class="locator-type">${locator.type}</span>
+                  <div class="locator-title">
+                    <span class="locator-type">${locator.type}</span>
+                    ${locator.confidence === 'fallback' ? '<span class="locator-confidence">Unique fallback</span>' : ''}
+                  </div>
                   <div class="locator-actions">
-                    <span class="match-count ${countClass}" title="${matchCount} matching element(s)">${countIcon} ${matchCount}</span>
-                    <button class="copy-btn" data-copy-text="${locator.code.replace(/"/g, '&quot;')}">
+                    <button class="match-count ${countClass}" type="button" data-locator-index="${index}" title="Show ${matchText} on the screen mirror">${matchText}</button>
+                    <button class="copy-btn" data-copy-text="${escapeHtml(locator.value)}" data-locator-index="${index}">
                       Copy
                     </button>
                   </div>
                 </div>
-                <div class="locator-value">${escapeHtml(locator.code)}</div>
+                <div class="locator-meta">
+                    <span>${escapeHtml(locator.strategy)}</span>
+                </div>
+                <div class="locator-value">${escapeHtml(locator.value)}</div>
               </div>
             `;
             });
         }
-        html += '</div>';
+        locatorsHtml += '</div>';
+
+        html += locatorsHtml;
+        html += attributesHtml;
 
         // Appium Methods Preview Section
         const methods = LocatorGenerator.generateAppiumMethods(element, sessionInfo.device.platform);
@@ -1315,6 +1574,10 @@ function displayElementDetails(element) {
 
         elementDetails.innerHTML = html;
 
+        if (focusLocators) {
+            elementDetails.closest('.panel-body')?.scrollTo({ top: 0, behavior: 'auto' });
+        }
+
         // Add event listener for dropdown change
         const selectEl = document.getElementById('appium-method-select');
         if (selectEl) {
@@ -1338,9 +1601,73 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+function showLocatorMatches(locatorIndex) {
+    const locator = currentDisplayedLocators[locatorIndex];
+    if (!locator) return;
+
+    const matches = getMatchingElements(locator);
+    clearElementHighlight();
+    clearLocatorMatchHighlights();
+
+    if (matches.length === 0) {
+        showNotification('No visible/source elements currently match this locator', 'warning');
+        LocatorLensAnalytics.trackEvent('locator_match_badge_clicked', {
+            surface: 'inspector',
+            locator_strategy: locator.strategy,
+            match_count_bucket: '0'
+        });
+        return;
+    }
+
+    positionScreenOverlay();
+    const screenOverlay = document.getElementById('screen-overlay');
+
+    matches.forEach((xmlElement, index) => {
+        const displayRect = getDisplayRectForElement(xmlElement);
+        if (displayRect) {
+            const highlight = document.createElement('div');
+            highlight.className = 'element-highlight locator-match-highlight';
+            highlight.style.left = `${displayRect.x}px`;
+            highlight.style.top = `${displayRect.y}px`;
+            highlight.style.width = `${displayRect.width}px`;
+            highlight.style.height = `${displayRect.height}px`;
+
+            const badge = document.createElement('span');
+            badge.className = 'locator-match-number';
+            badge.textContent = String(index + 1);
+            highlight.appendChild(badge);
+            screenOverlay.appendChild(highlight);
+        }
+
+        const headerDiv = elementToNodeMap.get(xmlElement);
+        if (headerDiv) {
+            headerDiv.classList.add('locator-match');
+            revealTreeHeader(headerDiv);
+            if (index === 0) {
+                headerDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+    });
+
+    showNotification(`Showing ${formatMatchCount(matches.length)} for ${locator.strategy}`, matches.length === 1 ? 'success' : 'warning');
+    LocatorLensAnalytics.trackEvent('locator_match_badge_clicked', {
+        surface: 'inspector',
+        locator_strategy: locator.strategy,
+        match_count_bucket: getMatchCountBucket(matches.length)
+    });
+}
+
 // Event delegation for copy buttons (CSP-safe approach)
 // Attach once to the element details container
 elementDetails.addEventListener('click', async (e) => {
+    const matchBtn = e.target.closest('.match-count');
+    if (matchBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        showLocatorMatches(parseInt(matchBtn.dataset.locatorIndex, 10));
+        return;
+    }
+
     const copyBtn = e.target.closest('.copy-btn, .copy-icon-btn');
     if (!copyBtn) return;
 
@@ -1401,6 +1728,12 @@ window.copyToClipboard = async (text, button) => {
         }
 
         if (copied) {
+            const locatorIndex = button.dataset.locatorIndex;
+            const locator = locatorIndex == null ? null : currentDisplayedLocators[Number(locatorIndex)];
+            LocatorLensAnalytics.trackEvent(button.classList.contains('copy-btn') ? 'locator_copied' : 'method_value_copied', {
+                surface: 'inspector',
+                locator_strategy: locator?.strategy || undefined
+            });
             // Visual feedback
             const originalText = button.textContent;
             button.textContent = 'Copied!';
@@ -1416,10 +1749,18 @@ window.copyToClipboard = async (text, button) => {
             }, 2000);
         } else {
             showNotification('Failed to copy to clipboard', 'error');
+            LocatorLensAnalytics.trackEvent('copy_failed', {
+                surface: 'inspector',
+                error_code: 'clipboard_failed'
+            });
         }
     } catch (error) {
         console.error('Failed to copy:', error);
         showNotification('Copy failed: ' + error.message, 'error');
+        LocatorLensAnalytics.trackEvent('copy_failed', {
+            surface: 'inspector',
+            error_code: 'copy_exception'
+        });
     }
 };
 
@@ -1436,11 +1777,17 @@ function handleSearch(e) {
     clearSearchHighlights();
 
     if (!searchTerm) {
+        sourceSearchTracked = false;
         // Reset: Show all, but don't change expansion state
         document.querySelectorAll('.tree-node-header').forEach(el => {
             el.style.display = '';
         });
         return;
+    }
+
+    if (!sourceSearchTracked && searchTerm.length >= 2) {
+        sourceSearchTracked = true;
+        LocatorLensAnalytics.trackEvent('source_search_used', { surface: 'inspector' });
     }
 
     // 1. Hide everything first
@@ -1517,6 +1864,10 @@ function updateConnectionStatus(connected) {
 async function disconnect() {
     try {
         const deviceId = sessionInfo?.device?.id;
+        LocatorLensAnalytics.trackEvent('session_disconnected', {
+            surface: 'inspector',
+            platform: sessionInfo?.device?.platform || 'unknown'
+        });
 
         // Mark as intentional so we don't auto-reconnect
         wsIntentionalClose = true;

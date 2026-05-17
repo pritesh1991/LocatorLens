@@ -1,15 +1,9 @@
 /**
  * Locator Generator Utility
- * Generates various locator strategies for mobile elements
+ * Generates raw Appium locator strategies and selectors.
  */
 
 class LocatorGenerator {
-    /**
-     * Generate all possible locators for an element
-     * @param {Object} element - Parsed element from page source
-     * @param {string} platform - 'android' or 'ios'
-     * @returns {Array} Array of locator objects
-     */
     static generateLocators(element, platform) {
         const locators = [];
 
@@ -19,236 +13,196 @@ class LocatorGenerator {
             locators.push(...this.generateIOSLocators(element));
         }
 
-        // Add common locators
         locators.push(...this.generateCommonLocators(element));
 
-        return this.rankLocators(locators);
+        return this.rankLocators(this.dedupeLocators(locators));
     }
 
-    /**
-     * Generate Android-specific locators
-     */
     static generateAndroidLocators(element) {
-        const locators = [];
         const attrs = element.attributes;
+        const locators = [];
 
-        // Resource ID
         if (attrs['resource-id']) {
-            locators.push({
-                type: 'Resource ID',
-                strategy: 'id',
-                value: attrs['resource-id'],
-                code: `By.id("${attrs['resource-id']}")`,
-                priority: 9
-            });
+            locators.push(this.createLocator('ID', 'id', attrs['resource-id'], 100));
+            locators.push(this.createLocator(
+                'UIAUTOMATOR',
+                '-android uiautomator',
+                `new UiSelector().resourceId("${this.escapeJavaString(attrs['resource-id'])}")`,
+                55
+            ));
         }
 
-        // Content Description (Accessibility)
         if (attrs['content-desc']) {
-            locators.push({
-                type: 'Content Desc',
-                strategy: 'accessibility id',
-                value: attrs['content-desc'],
-                code: `MobileBy.AccessibilityId("${attrs['content-desc']}")`,
-                priority: 8
-            });
-        }
-
-        // UiAutomator
-        if (attrs['resource-id']) {
-            const uiAutomator = `new UiSelector().resourceId("${attrs['resource-id']}")`;
-            locators.push({
-                type: 'UiAutomator (ID)',
-                strategy: '-android uiautomator',
-                value: uiAutomator,
-                code: `MobileBy.AndroidUIAutomator("${uiAutomator}")`,
-                priority: 7
-            });
+            locators.push(this.createLocator('ACCESSIBILITY ID', 'accessibility id', attrs['content-desc'], 90));
         }
 
         if (attrs.text) {
-            const uiAutomator = `new UiSelector().text("${attrs.text}")`;
-            locators.push({
-                type: 'UiAutomator (Text)',
-                strategy: '-android uiautomator',
-                value: uiAutomator,
-                code: `MobileBy.AndroidUIAutomator("${uiAutomator}")`,
-                priority: 6
-            });
+            locators.push(this.createLocator(
+                'UIAUTOMATOR',
+                '-android uiautomator',
+                `new UiSelector().text("${this.escapeJavaString(attrs.text)}")`,
+                45
+            ));
         }
 
         return locators;
     }
 
-    /**
-   * Generate iOS-specific locators
-   */
     static generateIOSLocators(element) {
-        const locators = [];
         const attrs = element.attributes;
+        const locators = [];
+        const className = this.normalizeIOSClassName(attrs.type || element.tagName);
 
-        // 1. Accessibility ID (Priority 9 - FASTEST for iOS)
-        // Uses native accessibility framework, extremely fast (~50ms)
         if (attrs.name) {
-            locators.push({
-                type: 'Accessibility ID',
-                strategy: 'accessibility id',
-                value: attrs.name,
-                code: `MobileBy.AccessibilityId("${attrs.name}")`,
-                priority: 9
-            });
+            locators.push(this.createLocator('ACCESSIBILITY ID', 'accessibility id', attrs.name, 90));
+            locators.push(this.createLocator(
+                'PREDICATE',
+                '-ios predicate string',
+                `name == "${this.escapePredicateString(attrs.name)}"`,
+                60
+            ));
         }
 
-        // Also check 'label' attribute for accessibility
         if (attrs.label && attrs.label !== attrs.name) {
-            locators.push({
-                type: 'Accessibility ID (Label)',
-                strategy: 'accessibility id',
-                value: attrs.label,
-                code: `MobileBy.AccessibilityId("${attrs.label}")`,
-                priority: 9
-            });
+            locators.push(this.createLocator('ACCESSIBILITY ID', 'accessibility id', attrs.label, 85));
         }
 
-        // 2. Predicate String - Name (Priority 8)
-        // Native NSPredicate, very fast (~150ms)
-        if (attrs.name) {
-            const predicate = `name == "${attrs.name}"`;
-            locators.push({
-                type: 'Predicate (Name)',
-                strategy: '-ios predicate string',
-                value: predicate,
-                code: `MobileBy.iOSNsPredicateString("${predicate}")`,
-                priority: 8
-            });
-        }
-
-        // 3. Predicate String - Label (Priority 8)
         if (attrs.label) {
-            const predicate = `label == "${attrs.label}"`;
-            locators.push({
-                type: 'Predicate (Label)',
-                strategy: '-ios predicate string',
-                value: predicate,
-                code: `MobileBy.iOSNsPredicateString("${predicate}")`,
-                priority: 8
-            });
+            locators.push(this.createLocator(
+                'PREDICATE',
+                '-ios predicate string',
+                `label == "${this.escapePredicateString(attrs.label)}"`,
+                55
+            ));
         }
 
-        // 4. Predicate String - Value (Priority 7)
-        // Good for input fields and sliders
         if (attrs.value) {
-            const predicate = `value == "${attrs.value}"`;
-            locators.push({
-                type: 'Predicate (Value)',
-                strategy: '-ios predicate string',
-                value: predicate,
-                code: `MobileBy.iOSNsPredicateString("${predicate}")`,
-                priority: 7
-            });
+            locators.push(this.createLocator(
+                'PREDICATE',
+                '-ios predicate string',
+                `value == "${this.escapePredicateString(attrs.value)}"`,
+                50
+            ));
         }
 
-        // 5. Class Chain (Priority 7)
-        // Fast iOS-specific selector (~80ms)
-        if (attrs.type) {
-            const classChain = `**/XCUIElementType${attrs.type}`;
-            locators.push({
-                type: 'Class Chain',
-                strategy: '-ios class chain',
-                value: classChain,
-                code: `MobileBy.iOSClassChain("${classChain}")`,
-                priority: 7
-            });
-
-            // Class Chain with name predicate (Priority 8) - More specific
+        if (className) {
             if (attrs.name) {
-                const specificChain = `**/XCUIElementType${attrs.type}[\`name == "${attrs.name}"\`]`;
-                locators.push({
-                    type: 'Class Chain (Named)',
-                    strategy: '-ios class chain',
-                    value: specificChain,
-                    code: `MobileBy.iOSClassChain("${specificChain}")`,
-                    priority: 8
-                });
+                locators.push(this.createLocator(
+                    'CLASS CHAIN',
+                    '-ios class chain',
+                    `**/${className}[\`name == "${this.escapePredicateString(attrs.name)}"\`]`,
+                    50
+                ));
+            }
+
+            locators.push(this.createLocator('CLASS CHAIN', '-ios class chain', `**/${className}`, 20));
+        }
+
+        return locators;
+    }
+
+    static generateCommonLocators(element) {
+        const attrs = element.attributes;
+        const locators = [];
+
+        if (attrs.class) {
+            locators.push(this.createLocator('CLASS NAME', 'class name', attrs.class, 25));
+        }
+
+        if (attrs.text) {
+            locators.push(this.createLocator('XPATH', 'xpath', `//*[@text=${this.toXPathLiteral(attrs.text)}]`, 80));
+        }
+
+        if (attrs['resource-id']) {
+            locators.push(this.createLocator('XPATH', 'xpath', `//*[@resource-id=${this.toXPathLiteral(attrs['resource-id'])}]`, 80));
+        }
+
+        if (attrs.name) {
+            locators.push(this.createLocator('XPATH', 'xpath', `//*[@name=${this.toXPathLiteral(attrs.name)}]`, 80));
+        }
+
+        if (attrs.label && attrs.label !== attrs.name) {
+            locators.push(this.createLocator('XPATH', 'xpath', `//*[@label=${this.toXPathLiteral(attrs.label)}]`, 75));
+        }
+
+        if (attrs.value) {
+            locators.push(this.createLocator('XPATH', 'xpath', `//*[@value=${this.toXPathLiteral(attrs.value)}]`, 70));
+        }
+
+        if (!locators.some(locator => locator.strategy === 'xpath')) {
+            const relativeXPath = this.generateRelativeXPath(element);
+            if (relativeXPath) {
+                locators.push(this.createLocator('XPATH', 'xpath', relativeXPath, 65));
             }
         }
 
         return locators;
     }
 
-    /**
-     * Generate common locators (XPath, Class Name)
-     */
-    static generateCommonLocators(element) {
-        const locators = [];
-        const attrs = element.attributes;
-
-        // Class Name
-        if (attrs.class) {
-            locators.push({
-                type: 'Class Name',
-                strategy: 'class name',
-                value: attrs.class,
-                code: `By.className("${attrs.class}")`,
-                priority: 4
-            });
-        }
-
-        // XPath - Absolute
-        if (element.xpath) {
-            locators.push({
-                type: 'XPath (Absolute)',
-                strategy: 'xpath',
-                value: element.xpath,
-                code: `By.xpath("${element.xpath}")`,
-                priority: 2
-            });
-        }
-
-        // XPath - Relative by text
-        if (attrs.text) {
-            const xpath = `//*[@text="${attrs.text}"]`;
-            locators.push({
-                type: 'XPath (Text)',
-                strategy: 'xpath',
-                value: xpath,
-                code: `By.xpath("${xpath}")`,
-                priority: 6
-            });
-        }
-
-        // XPath - Relative by resource-id
-        if (attrs['resource-id']) {
-            const xpath = `//*[@resource-id="${attrs['resource-id']}"]`;
-            locators.push({
-                type: 'XPath (Resource ID)',
-                strategy: 'xpath',
-                value: xpath,
-                code: `By.xpath("${xpath}")`,
-                priority: 7
-            });
-        }
-
-        // XPath - Relative by name (iOS)
-        if (attrs.name) {
-            const xpath = `//*[@name="${attrs.name}"]`;
-            locators.push({
-                type: 'XPath (Name)',
-                strategy: 'xpath',
-                value: xpath,
-                code: `By.xpath("${xpath}")`,
-                priority: 7
-            });
-        }
-
-        return locators;
+    static createLocator(type, strategy, value, priority) {
+        return {
+            type,
+            strategy,
+            value,
+            priority,
+            code: value
+        };
     }
 
-    /**
-     * Rank locators by priority and reliability
-     */
     static rankLocators(locators) {
         return locators.sort((a, b) => b.priority - a.priority);
+    }
+
+    static dedupeLocators(locators) {
+        const seen = new Set();
+        return locators.filter(locator => {
+            const key = `${locator.strategy}::${locator.value}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+    }
+
+    static normalizeIOSClassName(value) {
+        if (!value) return '';
+        return value.startsWith('XCUIElementType') ? value : `XCUIElementType${value}`;
+    }
+
+    static escapeJavaString(value) {
+        return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    }
+
+    static escapePredicateString(value) {
+        return this.escapeJavaString(value);
+    }
+
+    static toXPathLiteral(value) {
+        const text = String(value);
+        if (!text.includes('"')) return `"${text}"`;
+        if (!text.includes("'")) return `'${text}'`;
+
+        return `concat(${text.split('"').map(part => `"${part}"`).join(', \'"\', ')})`;
+    }
+
+    static generateRelativeXPath(element) {
+        const tagName = element.tagName;
+        if (!tagName) return '';
+
+        const parent = element.parentNode;
+        if (!parent && element.xpath) {
+            const match = element.xpath.match(/\/([^/\[]+)(?:\[(\d+)\])?$/);
+            if (match) {
+                const [, xpathTag, xpathIndex] = match;
+                return xpathIndex ? `(//${xpathTag})[${xpathIndex}]` : `//${xpathTag}`;
+            }
+        }
+
+        if (!parent) return `//${tagName}`;
+
+        const sameTagSiblings = Array.from(parent.children || []).filter(child => child.tagName === tagName);
+        if (sameTagSiblings.length <= 1) return `//${tagName}`;
+
+        return `(//${tagName})[${sameTagSiblings.indexOf(element) + 1}]`;
     }
 
     /**

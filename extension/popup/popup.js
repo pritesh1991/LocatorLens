@@ -16,6 +16,7 @@ const openLogsBtn = document.getElementById('open-logs-btn');
 
 // Error Modal Elements
 const errorModal = document.getElementById('error-modal');
+const errorModalTitle = document.getElementById('error-modal-title');
 const errorModalBody = document.getElementById('error-modal-body');
 const errorModalClose = document.getElementById('error-modal-close');
 const errorHelpBtn = document.getElementById('error-help-btn');
@@ -28,6 +29,8 @@ let serverStatus = { backend: false, appium: false };
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
+    LocatorLensAnalytics.trackPageView('popup', 'LocatorLens Popup');
+
     chrome.storage.sync.get({ backendPort: 8765 }, (s) => {
         BACKEND_URL = `http://localhost:${s.backendPort}`;
 
@@ -52,9 +55,9 @@ function setupEventListeners() {
     serverBtn.addEventListener('click', handleServerToggle);
     settingsLink.addEventListener('click', handleSettings);
 
-    const helpLink = document.getElementById('help-link');
-    if (helpLink) {
-        helpLink.addEventListener('click', handleSettings); // Same as settings, opens options.html
+    const feedbackLink = document.getElementById('feedback-link');
+    if (feedbackLink) {
+        feedbackLink.addEventListener('click', handleFeedback);
     }
 
     logsToggle.addEventListener('click', toggleLogs);
@@ -72,7 +75,10 @@ function setupEventListeners() {
         errorModalClose.addEventListener('click', hideErrorModal);
     }
     if (errorHelpBtn) {
-        errorHelpBtn.addEventListener('click', handleSettings);
+        errorHelpBtn.addEventListener('click', (e) => {
+            LocatorLensAnalytics.trackEvent('startup_error_help_clicked', { surface: 'popup' });
+            handleSettings(e);
+        });
     }
     // Close modal when clicking outside
     if (errorModal) {
@@ -106,6 +112,10 @@ function setupEventListeners() {
 function toggleLogs() {
     logsContent.classList.toggle('visible');
     logsToggle.classList.toggle('expanded');
+    LocatorLensAnalytics.trackEvent('logs_panel_toggled', {
+        surface: 'popup',
+        expanded: logsContent.classList.contains('visible')
+    });
 }
 
 function addLogEntry(message, level = 'info') {
@@ -131,6 +141,7 @@ function addLogEntry(message, level = 'info') {
 
 function handleSettings(e) {
     e.preventDefault();
+    LocatorLensAnalytics.trackEvent('settings_opened', { surface: 'popup' });
     // For now, just show an alert or open a placeholder options page
     // Since we don't have an options page yet, let's just show a message
     // or we could create a simple options.html
@@ -139,6 +150,12 @@ function handleSettings(e) {
     } else {
         window.open(chrome.runtime.getURL('options.html'));
     }
+}
+
+function handleFeedback(e) {
+    e.preventDefault();
+    LocatorLensAnalytics.trackEvent('feedback_opened', { surface: 'popup' });
+    chrome.tabs.create({ url: chrome.runtime.getURL('feedback.html') });
 }
 
 function updateServerStatus() {
@@ -176,6 +193,9 @@ function renderServerStatus() {
 async function handleServerToggle() {
     const isRunning = serverStatus.backend || serverStatus.appium;
     const command = isRunning ? 'stop-server' : 'start-server';
+    const action = isRunning ? 'stop' : 'start';
+
+    LocatorLensAnalytics.trackEvent(`server_${action}_clicked`, { surface: 'popup' });
 
     console.log('[Popup] Server button clicked, current status:', serverStatus);
     console.log('[Popup] Sending command:', command);
@@ -189,11 +209,20 @@ async function handleServerToggle() {
 
         serverBtn.disabled = false;
         if (response && response.success) {
+            LocatorLensAnalytics.trackEvent(`server_${action}_succeeded`, { surface: 'popup' });
             // Status update will happen via polling/message
             setTimeout(updateServerStatus, 1000);
         } else {
             const errorMsg = response?.error || chrome.runtime.lastError?.message || 'Unknown error';
             console.error('[Popup] Server toggle failed:', errorMsg);
+            LocatorLensAnalytics.trackEvent(`server_${action}_failed`, {
+                surface: 'popup',
+                error_code: chrome.runtime.lastError ? 'runtime_error' : 'server_command_failed'
+            });
+            if (isSetupRequiredError({ error: errorMsg, code: response?.code })) {
+                showErrorModal([{ error: errorMsg, code: response?.code }]);
+                return;
+            }
             showError(`Failed to ${isRunning ? 'stop' : 'start'} server: ${errorMsg}`);
         }
     });
@@ -266,6 +295,11 @@ async function handlePlatformChange(e) {
         return;
     }
 
+    LocatorLensAnalytics.trackEvent('platform_selected', {
+        surface: 'popup',
+        platform: selectedPlatform
+    });
+
     deviceSelect.disabled = true;
     deviceSelect.innerHTML = '<option value="">Loading devices...</option>';
     connectBtn.disabled = true;
@@ -277,13 +311,31 @@ async function handlePlatformChange(e) {
         if (data.success) {
             devices = data.devices;
             populateDeviceDropdown(devices);
+            LocatorLensAnalytics.trackEvent('devices_loaded', {
+                surface: 'popup',
+                platform: selectedPlatform,
+                result: 'success',
+                device_count: devices.length
+            });
         } else {
             showError(`Failed to fetch devices: ${data.error}`);
             deviceSelect.innerHTML = '<option value="">No devices found</option>';
+            LocatorLensAnalytics.trackEvent('devices_loaded', {
+                surface: 'popup',
+                platform: selectedPlatform,
+                result: 'failed',
+                error_code: 'backend_error'
+            });
         }
     } catch (error) {
         showError(`Error fetching devices: ${error.message}`);
         deviceSelect.innerHTML = '<option value="">Error loading devices</option>';
+        LocatorLensAnalytics.trackEvent('devices_loaded', {
+            surface: 'popup',
+            platform: selectedPlatform,
+            result: 'failed',
+            error_code: 'network_error'
+        });
     }
 }
 
@@ -314,11 +366,20 @@ function handleDeviceChange(e) {
     } else {
         selectedDevice = devices[parseInt(deviceIndex)];
         connectBtn.disabled = false;
+        LocatorLensAnalytics.trackEvent('device_selected', {
+            surface: 'popup',
+            platform: selectedDevice.platform || selectedPlatform
+        });
     }
 }
 
 async function handleConnect() {
     if (!selectedDevice) return;
+
+    LocatorLensAnalytics.trackEvent('device_connect_clicked', {
+        surface: 'popup',
+        platform: selectedDevice.platform || selectedPlatform
+    });
 
     connectBtn.disabled = true;
     connectBtn.innerHTML = `
@@ -346,6 +407,11 @@ async function handleConnect() {
             Creating session... (tab will open when ready)
           `;
         } else {
+            LocatorLensAnalytics.trackEvent('device_connect_failed', {
+                surface: 'popup',
+                platform: selectedDevice.platform || selectedPlatform,
+                error_code: 'request_failed'
+            });
             showError(`Connection error: ${response?.error || 'Unknown error'}`);
             resetConnectButton();
         }
@@ -365,15 +431,43 @@ function resetConnectButton() {
 
 function openLogsInNewTab() {
     // Request background script to open/focus logs tab
+    LocatorLensAnalytics.trackEvent('logs_tab_opened', { surface: 'popup' });
     chrome.runtime.sendMessage({ type: 'open-logs-tab' });
 }
 
 // Error Modal Functions
+function isSetupRequiredError(error) {
+    return error?.code === 'COMPANION_SETUP_REQUIRED' ||
+        error?.code === 'NATIVE_HOST_ERROR' ||
+        error?.error?.includes('auto setup installer') ||
+        error?.error?.includes('native host');
+}
+
 function showErrorModal(errors) {
     if (!errorModal || !errorModalBody) return;
 
     // Clear previous errors
     errorModalBody.innerHTML = '';
+    const isSetupRequired = errors.some(isSetupRequiredError);
+
+    if (errorModalTitle) {
+        errorModalTitle.textContent = isSetupRequired ? 'One-Time Setup Needed' : 'Setup Information';
+    }
+    if (errorHelpBtn) {
+        errorHelpBtn.textContent = isSetupRequired ? 'Set Up Companion' : 'Open Settings';
+    }
+
+    if (isSetupRequired) {
+        const setupMessage = document.createElement('div');
+        setupMessage.className = 'error-item';
+        setupMessage.innerHTML = `
+            <div class="error-server">LocatorLens is ready.</div>
+            <div class="error-text">Install the local companion once to start servers and connect your devices.</div>
+        `;
+        errorModalBody.appendChild(setupMessage);
+        errorModal.classList.remove('hidden');
+        return;
+    }
 
     // Add each error
     errors.forEach(error => {
@@ -382,7 +476,7 @@ function showErrorModal(errors) {
 
         const serverName = document.createElement('div');
         serverName.className = 'error-server';
-        serverName.textContent = `${error.server} Error:`;
+        serverName.textContent = error.server ? `${error.server} needs attention:` : 'Needs attention:';
 
         const errorText = document.createElement('div');
         errorText.className = 'error-text';
@@ -400,10 +494,16 @@ function showErrorModal(errors) {
 function hideErrorModal() {
     if (errorModal) {
         errorModal.classList.add('hidden');
+        LocatorLensAnalytics.trackEvent('startup_error_closed', { surface: 'popup' });
     }
 }
 
 function handleServerStartError(errors) {
+    LocatorLensAnalytics.trackEvent('startup_error_viewed', {
+        surface: 'popup',
+        error_count: errors.length
+    });
+
     // Auto-expand logs section to show error details
     if (!logsContent.classList.contains('visible')) {
         logsContent.classList.add('visible');
